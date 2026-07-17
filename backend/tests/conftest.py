@@ -2,12 +2,12 @@
 
 NOTA: os modelos usam UUID do dialeto postgres; SQLAlchemy mapeia para CHAR(32)
 em SQLite automaticamente com as_uuid=True.
-yfinance e SEMPRE mockado - nunca chamado nos testes.
+Finnhub/Twelve Data SAO SEMPRE mockados - nunca chamados nos testes.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -63,7 +63,7 @@ async def client(db_engine, monkeypatch):
 
 @pytest_asyncio.fixture
 async def user_a(db_session):
-    user = User(email="a@test.local", password_hash=hash_password("password-a"))
+    user = User(email="a@test.dev", password_hash=hash_password("password-a"))
     db_session.add(user)
     await db_session.commit()
     return user
@@ -71,7 +71,7 @@ async def user_a(db_session):
 
 @pytest_asyncio.fixture
 async def user_b(db_session):
-    user = User(email="b@test.local", password_hash=hash_password("password-b"))
+    user = User(email="b@test.dev", password_hash=hash_password("password-b"))
     db_session.add(user)
     await db_session.commit()
     return user
@@ -106,14 +106,10 @@ async def seeded_stock(db_session):
     return stock
 
 
-def mock_yfinance_valid(ticker_name="Apple Inc."):
-    """Patch de _yf_ticker devolvendo info valida sem tocar na rede."""
-    class FakeTicker:
-        info = {"shortName": ticker_name, "longName": ticker_name,
-                "currency": "USD", "exchange": "NMS"}
-
-        def history(self, **kwargs):
-            import pandas as pd
-            return pd.DataFrame()
-
-    return patch("app.services.market_data._yf_ticker", return_value=FakeTicker())
+def mock_market_data_valid(ticker_name="Apple Inc."):
+    """Patch de _finnhub_get devolvendo um perfil valido, sem tocar na rede."""
+    profile = {
+        "name": ticker_name, "currency": "USD",
+        "exchange": "NASDAQ", "finnhubIndustry": "Technology",
+    }
+    return patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=profile))

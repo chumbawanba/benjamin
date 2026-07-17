@@ -1,5 +1,5 @@
 -- ============================================================
--- SCHEMA: App Watchlist + Checklist + Agente de Avaliação
+-- SCHEMA: App Watchlist + Estratégias + Agente de Avaliação
 -- ============================================================
 
 -- ---------- 1. UTILIZADORES ----------
@@ -30,11 +30,12 @@ CREATE TABLE watchlist_items (
     target_sell_price  DECIMAL(12,4),
     notes           TEXT,
     added_at        TIMESTAMP DEFAULT NOW(),
+    display_order   INTEGER NOT NULL DEFAULT 0,     -- ordem manual definida pelo utilizador (Overview)
     UNIQUE(user_id, stock_id)
 );
 
--- ---------- 4. CHECKLISTS (templates configuráveis) ----------
-CREATE TABLE checklist_templates (
+-- ---------- 4. ESTRATÉGIAS (templates configuráveis) ----------
+CREATE TABLE strategy_templates (
     id              UUID PRIMARY KEY,
     user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
     name            VARCHAR(255) NOT NULL,          -- ex: "Estratégia Value", "Swing Trade"
@@ -44,17 +45,17 @@ CREATE TABLE checklist_templates (
     updated_at      TIMESTAMP DEFAULT NOW()
 );
 
--- Cada item da checklist é uma regra configurável, não código fixo
-CREATE TABLE checklist_items (
+-- Cada item da estratégia é uma regra configurável, não código fixo
+CREATE TABLE strategy_items (
     id                  UUID PRIMARY KEY,
-    template_id         UUID REFERENCES checklist_templates(id) ON DELETE CASCADE,
+    template_id         UUID REFERENCES strategy_templates(id) ON DELETE CASCADE,
     name                VARCHAR(255) NOT NULL,        -- ex: "RSI sobrevendido"
     category            VARCHAR(50),                  -- technical | fundamental | sentiment | news
     metric              VARCHAR(100),                 -- ex: "RSI_14", "PE_RATIO", "NEWS_SENTIMENT"
     operator            VARCHAR(20),                  -- <, >, <=, >=, ==, between
     threshold_value     DECIMAL(12,4),
     threshold_value_max DECIMAL(12,4),                -- usado quando operator = between
-    weight              DECIMAL(4,2) DEFAULT 1.0,      -- importância no score final
+    weight              DECIMAL(5,2) DEFAULT 1.0,      -- importância no score final (slider 0-100)
     direction           VARCHAR(10),                  -- 'buy_signal' | 'sell_signal'
     is_active           BOOLEAN DEFAULT TRUE,
     display_order       INT
@@ -100,7 +101,7 @@ CREATE TABLE evaluations (
     id                  UUID PRIMARY KEY,
     user_id             UUID REFERENCES users(id),
     stock_id            UUID REFERENCES stocks(id),
-    checklist_template_id UUID REFERENCES checklist_templates(id),
+    strategy_template_id UUID REFERENCES strategy_templates(id),
     run_at              TIMESTAMP DEFAULT NOW(),
     score               DECIMAL(6,2),           -- score ponderado final
     recommendation      VARCHAR(10),            -- BUY | SELL | HOLD
@@ -112,7 +113,7 @@ CREATE TABLE evaluations (
 CREATE TABLE evaluation_details (
     id                  UUID PRIMARY KEY,
     evaluation_id       UUID REFERENCES evaluations(id) ON DELETE CASCADE,
-    checklist_item_id   UUID REFERENCES checklist_items(id),
+    strategy_item_id    UUID REFERENCES strategy_items(id),
     observed_value      DECIMAL(12,4),
     passed              BOOLEAN,
     contribution        DECIMAL(6,2)            -- pontos que este item deu ao score

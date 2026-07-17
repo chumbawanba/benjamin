@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,5 +21,6 @@ class WatchlistItem(Base):
     target_sell_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     notes: Mapped[str | None] = mapped_column(Text)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     stock: Mapped["Stock"] = relationship()  # noqa: F821

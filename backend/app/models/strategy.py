@@ -10,8 +10,8 @@ from app.database import Base
 from app.models.user import utcnow
 
 
-class ChecklistTemplate(Base):
-    __tablename__ = "checklist_templates"
+class StrategyTemplate(Base):
+    __tablename__ = "strategy_templates"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -21,17 +21,17 @@ class ChecklistTemplate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    items: Mapped[list["ChecklistItem"]] = relationship(
+    items: Mapped[list["StrategyItem"]] = relationship(
         back_populates="template", cascade="all, delete-orphan"
     )
 
 
-class ChecklistItem(Base):
-    __tablename__ = "checklist_items"
+class StrategyItem(Base):
+    __tablename__ = "strategy_items"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     template_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("checklist_templates.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("strategy_templates.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str | None] = mapped_column(String(50))
@@ -39,9 +39,9 @@ class ChecklistItem(Base):
     operator: Mapped[str] = mapped_column(String(20), nullable=False)
     threshold_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
     threshold_value_max: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
-    weight: Mapped[Decimal] = mapped_column(Numeric(4, 2), default=Decimal("1.0"))
+    weight: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("1.0"))
     direction: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     display_order: Mapped[int | None] = mapped_column(Integer)
 
-    template: Mapped["ChecklistTemplate"] = relationship(back_populates="items")
+    template: Mapped["StrategyTemplate"] = relationship(back_populates="items")

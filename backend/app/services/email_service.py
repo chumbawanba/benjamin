@@ -9,12 +9,12 @@ logger = logging.getLogger(__name__)
 
 
 def build_summary_html(rows: list[dict]) -> str:
-    """rows: [{ticker, buy_score, sell_score, recommendation, price, checklist_name}]"""
-    by_checklist: dict[str, list[dict]] = {}
+    """rows: [{ticker, buy_score, sell_score, recommendation, price, strategy_name}]"""
+    by_strategy: dict[str, list[dict]] = {}
     for r in rows:
-        by_checklist.setdefault(r["checklist_name"], []).append(r)
+        by_strategy.setdefault(r["strategy_name"], []).append(r)
     parts = ["<h2>Benjamin — Resumo semanal</h2>"]
-    for name, group in by_checklist.items():
+    for name, group in by_strategy.items():
         parts.append(f"<h3>{name}</h3>")
         parts.append("<table border='1' cellpadding='6' cellspacing='0'>")
         parts.append("<tr><th>Ticker</th><th>Buy</th><th>Sell</th><th>Recomendação</th><th>Preço</th></tr>")

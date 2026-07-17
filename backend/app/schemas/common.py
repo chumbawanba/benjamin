@@ -60,19 +60,39 @@ class WatchlistItemOut(BaseModel):
     target_buy_price: Decimal | None
     target_sell_price: Decimal | None
     added_at: datetime
+    display_order: int
     latest_evaluation: EvaluationSummaryOut | None = None
 
     model_config = {"from_attributes": True}
 
 
-# ---- Checklists ----
-class ChecklistTemplateIn(BaseModel):
+class WatchlistReorderIn(BaseModel):
+    ordered_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+class TickerSearchResult(BaseModel):
+    ticker: str
+    name: str | None
+    exchange: str | None
+
+
+class NewsItemOut(BaseModel):
+    ticker: str
+    headline: str | None
+    summary: str | None
+    url: str | None
+    source: str | None
+    published_at: datetime | None
+
+
+# ---- Strategies ----
+class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     is_active: bool = True
 
 
-class ChecklistItemIn(BaseModel):
+class StrategyItemIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     category: str | None = None
     metric: str
@@ -85,17 +105,17 @@ class ChecklistItemIn(BaseModel):
     display_order: int | None = None
 
 
-class ChecklistItemOut(ChecklistItemIn):
+class StrategyItemOut(StrategyItemIn):
     id: uuid.UUID
     model_config = {"from_attributes": True}
 
 
-class ChecklistTemplateOut(BaseModel):
+class StrategyTemplateOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
     is_active: bool
-    items: list[ChecklistItemOut] = []
+    items: list[StrategyItemOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -107,7 +127,7 @@ class RunEvaluationIn(BaseModel):
 
 
 class EvaluationDetailOut(BaseModel):
-    checklist_item_id: uuid.UUID
+    strategy_item_id: uuid.UUID
     observed_value: Decimal | None
     passed: bool | None
     contribution: Decimal
@@ -117,5 +137,5 @@ class EvaluationDetailOut(BaseModel):
 
 class EvaluationOut(EvaluationSummaryOut):
     stock_id: uuid.UUID
-    checklist_template_id: uuid.UUID
+    strategy_template_id: uuid.UUID
     details: list[EvaluationDetailOut] = []

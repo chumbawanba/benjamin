@@ -20,16 +20,19 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://app:app@db:5432/benjamin
     ports:
-      - "127.0.0.1:8000:8000"
+      - "8000:8000"  # acessível na rede local (ex: telemóvel) — ver CLAUDE.md
+    volumes:
+      - ./backend:/srv
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build: ./frontend
-    environment:
-      VITE_API_BASE_URL: http://localhost:8000/api/v1
+    # sem VITE_API_BASE_URL: o client.ts deriva o host da API a partir de
+    # window.location.hostname, para funcionar tanto em localhost como no
+    # telemóvel (via IP da rede local).
     ports:
       - "5173:5173"
     volumes:

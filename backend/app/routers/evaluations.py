@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import ChecklistTemplate, Evaluation, User, WatchlistItem
+from app.models import Evaluation, StrategyTemplate, User, WatchlistItem
 from app.schemas.common import EvaluationOut, RunEvaluationIn
 from app.security import get_current_user
 from app.services import agent
@@ -19,12 +19,12 @@ async def run_evaluation(
     body: RunEvaluationIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     template = (
-        await db.execute(select(ChecklistTemplate).where(
-            ChecklistTemplate.id == body.template_id, ChecklistTemplate.user_id == user.id
+        await db.execute(select(StrategyTemplate).where(
+            StrategyTemplate.id == body.template_id, StrategyTemplate.user_id == user.id
         ))
     ).scalar_one_or_none()
     if template is None:
-        raise HTTPException(status_code=404, detail="Checklist não encontrada")
+        raise HTTPException(status_code=404, detail="Estratégia não encontrada")
 
     if body.stock_id is not None:
         in_watchlist = (

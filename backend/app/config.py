@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     summary_email_to: str = ""
     scheduler_enabled: bool = True
+    finnhub_api_key: str = ""
+    twelvedata_api_key: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

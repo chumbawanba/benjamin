@@ -1,5 +1,10 @@
 // Wrapper único com JWT para todas as chamadas à API (CLAUDE.md secção Frontend).
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api/v1';
+// Sem VITE_API_BASE_URL definido, deriva o host a partir de onde a página foi aberta
+// (localhost no PC, IP da rede local no telemóvel) — evita hardcodar "localhost",
+// que no telemóvel apontaria para o próprio telemóvel em vez do PC.
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  (typeof window !== 'undefined' ? `http://${window.location.hostname}:8000/api/v1` : 'http://localhost:8000/api/v1');
 const TOKEN_KEY = 'benjamin_token';
 
 let token: string | null = typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;

@@ -1,7 +1,7 @@
 # CLAUDE.md — Convenções do projeto
 
 ## Contexto
-App de watchlist de ações + checklists configuráveis + agente determinístico de avaliação.
+App de watchlist de ações + estratégias configuráveis + agente determinístico de avaliação.
 A especificação completa está em `SPEC.md` — segue-a. Implementação por fases, na ordem da secção 10.
 
 ## Regras obrigatórias
@@ -18,7 +18,7 @@ A especificação completa está em `SPEC.md` — segue-a. Implementação por f
 - Recursos de outro utilizador devolvem **404**, não 403.
 - Toda a lógica de negócio vive em `app/services/` — routers só validam input e chamam services.
 - Migrations sempre via Alembic; nunca `create_all()` fora dos testes.
-- yfinance: **nunca** chamado diretamente nos testes — sempre mockado.
+- Finnhub/Twelve Data: **nunca** chamados diretamente nos testes — sempre mockados (`_finnhub_get`/`_twelvedata_get`).
 
 ### Dependências
 - Não adicionar dependências novas sem necessidade clara; preferir stdlib e o que já está no `pyproject.toml`.
@@ -38,7 +38,11 @@ A especificação completa está em `SPEC.md` — segue-a. Implementação por f
 ### Segurança
 - Segredos só em variáveis de ambiente; `.env` está no `.gitignore` e nunca é commitado.
 - Passwords com bcrypt. JWT com expiração.
-- Em `docker-compose`, portas da API e da BD mapeadas só para `127.0.0.1` (exceto frontend dev).
+- Em `docker-compose` (dev): porta da BD mapeada só para `127.0.0.1`. Porta da API aberta na
+  rede local (`8000:8000`, sem restrição a `127.0.0.1`) a pedido explícito, para testar no
+  telemóvel — CORS via `allow_origin_regex` restrito a `localhost`/IPs privados (192.168.x.x,
+  10.x.x.x), nunca aberto à internet. Em produção (`docker-compose.prod.yml`, Fase 7) isto muda
+  para Caddy + HTTPS na frente, sem expor a API diretamente.
 
 ### O que NÃO fazer
 - Não implementar nada da secção 13 do SPEC.md (fora do MVP), mesmo que pareça útil.

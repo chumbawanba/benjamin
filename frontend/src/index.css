@@ -5,3 +5,7 @@
 html, body, #root {
   height: 100%;
 }
+
+body {
+  @apply bg-gray-50 dark:bg-slate-950;
+}

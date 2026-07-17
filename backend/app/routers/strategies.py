@@ -6,18 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import ChecklistItem, ChecklistTemplate, User
+from app.models import StrategyItem, StrategyTemplate, User
 from app.schemas.common import (
     VALID_DIRECTIONS, VALID_OPERATORS,
-    ChecklistItemIn, ChecklistItemOut, ChecklistTemplateIn, ChecklistTemplateOut,
+    StrategyItemIn, StrategyItemOut, StrategyTemplateIn, StrategyTemplateOut,
 )
 from app.security import get_current_user
 from app.services.indicators_core import INDICATORS
 
-router = APIRouter(prefix="/checklists", tags=["checklists"])
+router = APIRouter(prefix="/strategies", tags=["strategies"])
 
 
-def _validate_item(body: ChecklistItemIn) -> None:
+def _validate_item(body: StrategyItemIn) -> None:
     if body.metric not in INDICATORS:
         raise HTTPException(status_code=422, detail=f"Métrica desconhecida: {body.metric}")
     if body.operator not in VALID_OPERATORS:
@@ -32,11 +32,11 @@ def _validate_item(body: ChecklistItemIn) -> None:
 
 async def _get_owned_template(
     db: AsyncSession, template_id: uuid.UUID, user_id: uuid.UUID
-) -> ChecklistTemplate:
+) -> StrategyTemplate:
     template = (
         await db.execute(
-            select(ChecklistTemplate).options(selectinload(ChecklistTemplate.items))
-            .where(ChecklistTemplate.id == template_id, ChecklistTemplate.user_id == user_id)
+            select(StrategyTemplate).options(selectinload(StrategyTemplate.items))
+            .where(StrategyTemplate.id == template_id, StrategyTemplate.user_id == user_id)
         )
     ).scalar_one_or_none()
     if template is None:
@@ -47,36 +47,39 @@ async def _get_owned_template(
 @router.get("/metrics")
 async def list_metrics(user: User = Depends(get_current_user)):
     return [
-        {"key": key, "kind": spec["kind"], "lookback_days": spec["lookback_days"]}
+        {
+            "key": key, "kind": spec["kind"], "lookback_days": spec["lookback_days"],
+            "description": spec.get("description"),
+        }
         for key, spec in INDICATORS.items()
     ]
 
 
-@router.get("", response_model=list[ChecklistTemplateOut])
-async def list_checklists(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+@router.get("", response_model=list[StrategyTemplateOut])
+async def list_strategies(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     templates = (
         await db.execute(
-            select(ChecklistTemplate).options(selectinload(ChecklistTemplate.items))
-            .where(ChecklistTemplate.user_id == user.id)
-            .order_by(ChecklistTemplate.created_at.desc())
+            select(StrategyTemplate).options(selectinload(StrategyTemplate.items))
+            .where(StrategyTemplate.user_id == user.id)
+            .order_by(StrategyTemplate.created_at.desc())
         )
     ).scalars().all()
     return templates
 
 
-@router.post("", response_model=ChecklistTemplateOut, status_code=201)
-async def create_checklist(
-    body: ChecklistTemplateIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+@router.post("", response_model=StrategyTemplateOut, status_code=201)
+async def create_strategy(
+    body: StrategyTemplateIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    template = ChecklistTemplate(user_id=user.id, **body.model_dump())
+    template = StrategyTemplate(user_id=user.id, **body.model_dump())
     db.add(template)
     await db.commit()
     return await _get_owned_template(db, template.id, user.id)
 
 
-@router.put("/{template_id}", response_model=ChecklistTemplateOut)
-async def update_checklist(
-    template_id: uuid.UUID, body: ChecklistTemplateIn,
+@router.put("/{template_id}", response_model=StrategyTemplateOut)
+async def update_strategy(
+    template_id: uuid.UUID, body: StrategyTemplateIn,
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     template = await _get_owned_template(db, template_id, user.id)
@@ -87,7 +90,7 @@ async def update_checklist(
 
 
 @router.delete("/{template_id}", status_code=204)
-async def delete_checklist(
+async def delete_strategy(
     template_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     template = await _get_owned_template(db, template_id, user.id)
@@ -95,28 +98,28 @@ async def delete_checklist(
     await db.commit()
 
 
-@router.post("/{template_id}/items", response_model=ChecklistItemOut, status_code=201)
+@router.post("/{template_id}/items", response_model=StrategyItemOut, status_code=201)
 async def add_item(
-    template_id: uuid.UUID, body: ChecklistItemIn,
+    template_id: uuid.UUID, body: StrategyItemIn,
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     await _get_owned_template(db, template_id, user.id)
     _validate_item(body)
-    item = ChecklistItem(template_id=template_id, **body.model_dump())
+    item = StrategyItem(template_id=template_id, **body.model_dump())
     db.add(item)
     await db.commit()
-    return ChecklistItemOut.model_validate(item)
+    return StrategyItemOut.model_validate(item)
 
 
-@router.put("/items/{item_id}", response_model=ChecklistItemOut)
+@router.put("/items/{item_id}", response_model=StrategyItemOut)
 async def update_item(
-    item_id: uuid.UUID, body: ChecklistItemIn,
+    item_id: uuid.UUID, body: StrategyItemIn,
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     item = (
         await db.execute(
-            select(ChecklistItem).join(ChecklistTemplate)
-            .where(ChecklistItem.id == item_id, ChecklistTemplate.user_id == user.id)
+            select(StrategyItem).join(StrategyTemplate)
+            .where(StrategyItem.id == item_id, StrategyTemplate.user_id == user.id)
         )
     ).scalar_one_or_none()
     if item is None:
@@ -125,7 +128,7 @@ async def update_item(
     for key, value in body.model_dump().items():
         setattr(item, key, value)
     await db.commit()
-    return ChecklistItemOut.model_validate(item)
+    return StrategyItemOut.model_validate(item)
 
 
 @router.delete("/items/{item_id}", status_code=204)
@@ -134,8 +137,8 @@ async def delete_item(
 ):
     item = (
         await db.execute(
-            select(ChecklistItem).join(ChecklistTemplate)
-            .where(ChecklistItem.id == item_id, ChecklistTemplate.user_id == user.id)
+            select(StrategyItem).join(StrategyTemplate)
+            .where(StrategyItem.id == item_id, StrategyTemplate.user_id == user.id)
         )
     ).scalar_one_or_none()
     if item is None:

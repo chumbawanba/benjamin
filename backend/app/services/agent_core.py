@@ -1,6 +1,6 @@
 """Logica pura do agente de avaliacao. Sem BD - testavel isoladamente.
 
-Recebe os itens da checklist (como dicts/objetos simples) e os valores
+Recebe os itens da estratégia (como dicts/objetos simples) e os valores
 observados dos indicadores; devolve scores, recomendacao e detalhes.
 """
 from dataclasses import dataclass

@@ -1,49 +1,177 @@
-"""Ingestao de dados de mercado via yfinance, com gravacao idempotente."""
-import uuid
+"""Ingestão de dados de mercado via Finnhub (preço atual + fundamentais + pesquisa)
+e Twelve Data (histórico diário, usado só para o backfill inicial por ação).
+
+Substitui o yfinance (Fase 3 original): o Yahoo Finance não tem API oficial e
+bloqueia pedidos com 429 de forma imprevisível e persistente. Ver HANDOFF.md.
+
+Nomes dos campos de `/stock/metric` confirmados com payload real (MSFT,
+2026-07-17): peTTM, currentDividendYieldTTM/dividendYieldIndicatedAnnual (em
+percentagem, daí a divisão por 100), marketCapitalization (em milhões, daí a
+multiplicação por 1_000_000), epsTTM, totalDebt/totalEquityAnnual.
+"""
+import logging
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models import FundamentalsSnapshot, PriceSnapshot, Stock
 
+logger = logging.getLogger(__name__)
+
 FRESHNESS_DAYS = 3
-HISTORY_PERIOD = "1y"
+MIN_HISTORY_ROWS = 200  # cobre SMA_200; abaixo disto tenta backfill via Twelve Data
+HTTP_TIMEOUT = 10.0
+
+FINNHUB_BASE = "https://finnhub.io/api/v1"
+TWELVEDATA_BASE = "https://api.twelvedata.com"
 
 
-def _yf_ticker(ticker: str):
-    import yfinance as yf  # import local: facilita mock nos testes
-    return yf.Ticker(ticker)
+async def _finnhub_get(path: str, params: dict) -> dict:
+    """GET a um endpoint da Finnhub. Função isolada: facilita mock nos testes."""
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.get(
+            f"{FINNHUB_BASE}/{path}", params={**params, "token": settings.finnhub_api_key}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _twelvedata_get(path: str, params: dict) -> dict:
+    """GET a um endpoint da Twelve Data. Função isolada: facilita mock nos testes."""
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.get(
+            f"{TWELVEDATA_BASE}/{path}", params={**params, "apikey": settings.twelvedata_api_key}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_company_news(ticker: str, days: int = 7, limit: int = 5) -> list[dict]:
+    """Notícias recentes de uma ação via Finnhub /company-news. Nunca lança
+    exceção — devolve lista vazia se falhar (mesmo padrão de search_tickers)."""
+    today = datetime.now(timezone.utc).date()
+    since = today - timedelta(days=days)
+    try:
+        data = await _finnhub_get(
+            "company-news",
+            {"symbol": ticker, "from": since.isoformat(), "to": today.isoformat()},
+        )
+    except Exception:
+        logger.warning("Finnhub indisponível a obter notícias de %s", ticker, exc_info=True)
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for item in data[:limit]:
+        ts = item.get("datetime")
+        out.append({
+            "ticker": ticker,
+            "headline": item.get("headline"),
+            "summary": item.get("summary"),
+            "url": item.get("url"),
+            "source": item.get("source"),
+            "published_at": datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None,
+        })
+    return out
+
+
+async def search_tickers(query: str, limit: int = 8) -> list[dict]:
+    """Pesquisa tickers por nome ou símbolo via Finnhub /search. Nunca lança
+    exceção — devolve lista vazia se a pesquisa falhar (ex: sem rede, key inválida)."""
+    query = query.strip()
+    if not query:
+        return []
+    try:
+        data = await _finnhub_get("search", {"q": query})
+    except Exception:
+        logger.warning("Pesquisa de tickers falhou para '%s'", query, exc_info=True)
+        return []
+    out = []
+    for r in (data.get("result") or [])[:limit]:
+        symbol = r.get("symbol")
+        if not symbol:
+            continue
+        out.append({
+            "ticker": symbol,
+            "name": r.get("description"),
+            "exchange": r.get("type"),
+        })
+    return out
 
 
 async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | None:
-    """Devolve a stock existente ou cria-a validando o ticker via yfinance.
-    Devolve None se o ticker nao existir."""
+    """Devolve a stock existente ou cria-a.
+
+    Tenta validar/enriquecer via Finnhub (stock/profile2). Se o pedido falhar
+    (rede, rate limit, key inválida, etc.) aceita o ticker na mesma sem metadados
+    — só rejeita quando a Finnhub responde com sucesso a dizer que o símbolo
+    não existe (perfil vazio)."""
     ticker = ticker.upper().strip()
+    if not ticker:
+        return None
     existing = (await db.execute(select(Stock).where(Stock.ticker == ticker))).scalar_one_or_none()
     if existing:
         return existing
+
+    profile: dict | None
     try:
-        info = _yf_ticker(ticker).info or {}
+        profile = await _finnhub_get("stock/profile2", {"symbol": ticker})
     except Exception:
-        return None
-    if not info.get("shortName") and not info.get("longName"):
-        return None
+        logger.warning(
+            "Finnhub indisponível a validar '%s' — a adicionar sem metadados por agora",
+            ticker, exc_info=True,
+        )
+        profile = None
+
+    if profile is not None and not profile:
+        return None  # perfil vazio = símbolo não existe
+
+    profile = profile or {}
     stock = Stock(
         ticker=ticker,
-        name=info.get("longName") or info.get("shortName"),
-        exchange=info.get("exchange"),
-        sector=info.get("sector"),
-        currency=info.get("currency"),
+        name=profile.get("name"),
+        exchange=profile.get("exchange"),
+        sector=profile.get("finnhubIndustry"),
+        currency=profile.get("currency"),
     )
     db.add(stock)
     await db.flush()
     return stock
 
 
+async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
+    """Tenta preencher nome/exchange/sector/currency em falta.
+
+    Cobre o caso em que `validate_and_create_stock` aceitou o ticker sem
+    metadados (Finnhub indisponível/rate-limited nesse momento) — sem isto o
+    nome ficava None para sempre. No-op assim que o nome já estiver definido
+    (só uma tentativa de Finnhub por stock, não a cada refresh)."""
+    if stock.name is not None:
+        return
+    try:
+        profile = await _finnhub_get("stock/profile2", {"symbol": stock.ticker})
+    except Exception:
+        logger.warning(
+            "Finnhub indisponível a preencher perfil de %s — tenta-se novamente mais tarde",
+            stock.ticker, exc_info=True,
+        )
+        return
+    if not profile:
+        return
+    stock.name = profile.get("name")
+    stock.exchange = profile.get("exchange")
+    stock.sector = profile.get("finnhubIndustry")
+    stock.currency = profile.get("currency")
+    await db.flush()
+
+
 async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     """Atualiza snapshots se o mais recente tiver mais de FRESHNESS_DAYS."""
+    await _backfill_profile(db, stock)
     latest = (
         await db.execute(
             select(func.max(PriceSnapshot.date)).where(PriceSnapshot.stock_id == stock.id)
@@ -57,29 +185,72 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
 
 
 async def refresh_prices(db: AsyncSession, stock: Stock) -> int:
-    t = _yf_ticker(stock.ticker)
-    hist = t.history(period=HISTORY_PERIOD, auto_adjust=True)
-    if hist is None or hist.empty:
-        return 0
+    """Garante histórico suficiente (Twelve Data, só quando ainda faltam dados)
+    e regista o preço mais recente do dia (Finnhub /quote)."""
     existing_dates = set(
         (await db.execute(
             select(PriceSnapshot.date).where(PriceSnapshot.stock_id == stock.id)
         )).scalars().all()
     )
     inserted = 0
-    for idx, row in hist.iterrows():
-        d: date = idx.date()
+    if len(existing_dates) < MIN_HISTORY_ROWS:
+        inserted += await _backfill_history(db, stock, existing_dates)
+    inserted += await _record_latest_quote(db, stock, existing_dates)
+    return inserted
+
+
+async def _backfill_history(db: AsyncSession, stock: Stock, existing_dates: set[date]) -> int:
+    try:
+        data = await _twelvedata_get(
+            "time_series", {"symbol": stock.ticker, "interval": "1day", "outputsize": "365"}
+        )
+    except Exception:
+        logger.warning(
+            "Twelve Data indisponível a preencher histórico de %s", stock.ticker, exc_info=True
+        )
+        return 0
+    values = data.get("values") if isinstance(data, dict) else None
+    if not values:
+        return 0
+    inserted = 0
+    for row in values:
+        try:
+            d = datetime.strptime(row["datetime"], "%Y-%m-%d").date()
+        except (KeyError, ValueError):
+            continue
         if d in existing_dates:
             continue
         db.add(PriceSnapshot(
             stock_id=stock.id, date=d,
-            open=_dec(row.get("Open")), high=_dec(row.get("High")),
-            low=_dec(row.get("Low")), close=_dec(row.get("Close")),
-            volume=int(row["Volume"]) if row.get("Volume") == row.get("Volume") else None,
+            open=_dec(row.get("open")), high=_dec(row.get("high")),
+            low=_dec(row.get("low")), close=_dec(row.get("close")),
+            volume=_int(row.get("volume")),
         ))
+        existing_dates.add(d)
         inserted += 1
     await db.flush()
     return inserted
+
+
+async def _record_latest_quote(db: AsyncSession, stock: Stock, existing_dates: set[date]) -> int:
+    today = datetime.now(timezone.utc).date()
+    if today in existing_dates:
+        return 0
+    try:
+        quote = await _finnhub_get("quote", {"symbol": stock.ticker})
+    except Exception:
+        logger.warning("Finnhub indisponível a obter cotação de %s", stock.ticker, exc_info=True)
+        return 0
+    price = quote.get("c") if isinstance(quote, dict) else None
+    if not price:
+        return 0
+    db.add(PriceSnapshot(
+        stock_id=stock.id, date=today,
+        open=_dec(quote.get("o")), high=_dec(quote.get("h")),
+        low=_dec(quote.get("l")), close=_dec(price), volume=None,
+    ))
+    await db.flush()
+    return 1
 
 
 async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
@@ -92,21 +263,44 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
     if existing:
         return
     try:
-        info = _yf_ticker(stock.ticker).info or {}
+        data = await _finnhub_get("stock/metric", {"symbol": stock.ticker, "metric": "all"})
     except Exception:
+        logger.warning("Finnhub indisponível a obter fundamentais de %s", stock.ticker, exc_info=True)
         return
+    metric = data.get("metric") if isinstance(data, dict) else None
+    if not metric:
+        return
+    pe = metric.get("peTTM") or metric.get("peBasicExclExtraTTM") or metric.get("peNormalizedAnnual")
+    dividend_yield = metric.get("currentDividendYieldTTM") or metric.get("dividendYieldIndicatedAnnual")
+    market_cap = metric.get("marketCapitalization")
     db.add(FundamentalsSnapshot(
         stock_id=stock.id, date=today,
-        pe_ratio=_dec(info.get("trailingPE")),
-        eps=_dec(info.get("trailingEps")),
-        debt_to_equity=_dec(info.get("debtToEquity")),
-        dividend_yield=_dec(info.get("dividendYield")),
-        market_cap=info.get("marketCap"),
+        pe_ratio=_dec(pe),
+        eps=_dec(metric.get("epsTTM") or metric.get("epsBasicExclExtraItemsTTM")),
+        debt_to_equity=_dec(metric.get("totalDebt/totalEquityAnnual")),
+        # Finnhub devolve o yield em percentagem (ex: 0.65 = 0.65%); guardamos como fração.
+        dividend_yield=_dec(dividend_yield / 100 if dividend_yield is not None else None),
+        market_cap=int(market_cap * 1_000_000) if market_cap else None,
     ))
     await db.flush()
 
 
 def _dec(value) -> Decimal | None:
-    if value is None or value != value:  # NaN check
+    if value is None:
         return None
-    return Decimal(str(round(float(value), 6)))
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if value != value:  # NaN
+        return None
+    return Decimal(str(round(value, 6)))
+
+
+def _int(value) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None

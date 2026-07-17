@@ -11,7 +11,7 @@ from app.services.indicators_core import INDICATORS, calc_rsi, calc_sma, latest_
 
 
 def make_items():
-    """Checklist 'Value simples' - exemplo de referencia do SPEC seccao 6."""
+    """Estrategia 'Value simples' - exemplo de referencia do SPEC seccao 6."""
     return [
         {"id": 1, "metric": "RSI_14", "operator": "<", "threshold_value": 30,
          "weight": 2, "direction": "buy_signal"},
@@ -115,7 +115,10 @@ class TestIndicators(unittest.TestCase):
         self.assertIsNone(latest_close(pd.Series([], dtype=float)))
 
     def test_registry_has_all_mvp_indicators(self):
-        expected = {"PRICE_CLOSE", "RSI_14", "SMA_50", "SMA_200", "PE_RATIO", "DIVIDEND_YIELD"}
+        expected = {
+            "PRICE_CLOSE", "RSI_14", "SMA_50", "SMA_200", "PE_RATIO", "DIVIDEND_YIELD",
+            "EPS", "DEBT_TO_EQUITY", "MARKET_CAP",
+        }
         self.assertEqual(set(INDICATORS.keys()), expected)
 
 

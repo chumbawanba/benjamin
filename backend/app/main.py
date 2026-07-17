@@ -8,8 +8,8 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, checklists, evaluations, watchlist
-from app.scheduler import weekly_job
+from app.routers import auth, evaluations, strategies, watchlist
+from app.scheduler import daily_refresh_job, weekly_job
 
 
 @asynccontextmanager
@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
     scheduler = None
     if settings.scheduler_enabled:
         scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler.add_job(daily_refresh_job, CronTrigger(hour=6, minute=0))
         scheduler.add_job(weekly_job, CronTrigger(day_of_week="sat", hour=8, minute=0))
         scheduler.start()
     yield
@@ -28,8 +29,10 @@ app = FastAPI(title="Benjamin", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
+    # regex em vez de lista fixa: permite aceder a partir de outro dispositivo na
+    # mesma rede local (ex: telemóvel), sem abrir para a internet. Auth é via JWT
+    # no header Authorization, não cookies — não precisamos de allow_credentials.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):5173",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,7 +40,7 @@ app.add_middleware(
 API = "/api/v1"
 app.include_router(auth.router, prefix=API)
 app.include_router(watchlist.router, prefix=API)
-app.include_router(checklists.router, prefix=API)
+app.include_router(strategies.router, prefix=API)
 app.include_router(evaluations.router, prefix=API)
 
 

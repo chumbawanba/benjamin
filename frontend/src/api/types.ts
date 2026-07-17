@@ -23,12 +23,13 @@ export interface WatchlistItem {
   target_buy_price: number | null;
   target_sell_price: number | null;
   added_at: string;
+  display_order: number;
   latest_evaluation: EvaluationSummary | null;
 }
 
 export type Direction = 'buy_signal' | 'sell_signal';
 
-export interface ChecklistItem {
+export interface StrategyItem {
   id: string;
   name: string;
   category: string | null;
@@ -42,7 +43,7 @@ export interface ChecklistItem {
   display_order: number | null;
 }
 
-export interface ChecklistItemInput {
+export interface StrategyItemInput {
   name: string;
   category?: string | null;
   metric: string;
@@ -55,16 +56,16 @@ export interface ChecklistItemInput {
   display_order?: number | null;
 }
 
-export interface ChecklistTemplate {
+export interface StrategyTemplate {
   id: string;
   name: string;
   description: string | null;
   is_active: boolean;
-  items: ChecklistItem[];
+  items: StrategyItem[];
 }
 
 export interface EvaluationDetail {
-  checklist_item_id: string;
+  strategy_item_id: string;
   observed_value: number | null;
   passed: boolean | null;
   contribution: number;
@@ -72,12 +73,28 @@ export interface EvaluationDetail {
 
 export interface Evaluation extends EvaluationSummary {
   stock_id: string;
-  checklist_template_id: string;
+  strategy_template_id: string;
   details: EvaluationDetail[];
+}
+
+export interface TickerSearchResult {
+  ticker: string;
+  name: string | null;
+  exchange: string | null;
 }
 
 export interface MetricInfo {
   key: string;
   kind: 'price' | 'fundamental';
   lookback_days: number;
+  description: string | null;
+}
+
+export interface NewsItem {
+  ticker: string;
+  headline: string | null;
+  summary: string | null;
+  url: string | null;
+  source: string | null;
+  published_at: string | null;
 }

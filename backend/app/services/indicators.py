@@ -24,8 +24,12 @@ async def get_indicator(db: AsyncSession, stock_id: uuid.UUID, metric: str) -> f
             IndicatorValue.date == today,
         ))
     ).scalar_one_or_none()
-    if cached is not None:
-        return float(cached.value) if cached.value is not None else None
+    # Só confiamos na cache quando tem valor. Um cache com None guardado antes
+    # de existirem dados de mercado (ex: primeira tentativa falhou) não deve
+    # bloquear recalculos posteriores no mesmo dia, uma vez que os dados podem
+    # ter chegado entretanto (ensure_fresh corre sempre antes disto).
+    if cached is not None and cached.value is not None:
+        return float(cached.value)
 
     spec = INDICATORS[metric]
     if spec["kind"] == "price":
@@ -33,11 +37,16 @@ async def get_indicator(db: AsyncSession, stock_id: uuid.UUID, metric: str) -> f
         value = spec["fn"](closes)
     else:  # fundamental
         value = await _load_fundamental(db, stock_id, spec["field"])
+        if value is not None and spec.get("scale"):
+            value = value / spec["scale"]
 
-    db.add(IndicatorValue(
-        stock_id=stock_id, indicator_name=metric, date=today,
-        value=Decimal(str(round(value, 6))) if value is not None else None,
-    ))
+    decimal_value = Decimal(str(round(value, 6))) if value is not None else None
+    if cached is not None:
+        cached.value = decimal_value
+    else:
+        db.add(IndicatorValue(
+            stock_id=stock_id, indicator_name=metric, date=today, value=decimal_value,
+        ))
     await db.flush()
     return value
 

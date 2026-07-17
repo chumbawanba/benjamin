@@ -1,11 +1,11 @@
-"""Agente: liga checklist + indicadores + BD. A logica de score vive em agent_core."""
+"""Agente: liga estratégia + indicadores + BD. A logica de score vive em agent_core."""
 import uuid
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ChecklistItem, ChecklistTemplate, Evaluation, EvaluationDetail, Stock
+from app.models import Evaluation, EvaluationDetail, Stock, StrategyItem, StrategyTemplate
 from app.services import indicators, market_data
 from app.services.agent_core import compute_evaluation
 
@@ -18,9 +18,9 @@ async def evaluate(
 
     items_rows = (
         await db.execute(
-            select(ChecklistItem)
-            .where(ChecklistItem.template_id == template_id, ChecklistItem.is_active.is_(True))
-            .order_by(ChecklistItem.display_order.asc().nulls_last())
+            select(StrategyItem)
+            .where(StrategyItem.template_id == template_id, StrategyItem.is_active.is_(True))
+            .order_by(StrategyItem.display_order.asc().nulls_last())
         )
     ).scalars().all()
 
@@ -41,7 +41,7 @@ async def evaluate(
     result = compute_evaluation(items, observed)
 
     evaluation = Evaluation(
-        user_id=user_id, stock_id=stock_id, checklist_template_id=template_id,
+        user_id=user_id, stock_id=stock_id, strategy_template_id=template_id,
         buy_score=Decimal(str(result.buy_score)), sell_score=Decimal(str(result.sell_score)),
         recommendation=result.recommendation,
         price_at_evaluation=(
@@ -52,7 +52,7 @@ async def evaluate(
     await db.flush()
     for d in result.details:
         db.add(EvaluationDetail(
-            evaluation_id=evaluation.id, checklist_item_id=d.item_id,
+            evaluation_id=evaluation.id, strategy_item_id=d.item_id,
             observed_value=Decimal(str(d.observed_value)) if d.observed_value is not None else None,
             passed=d.passed,
             contribution=Decimal(str(d.contribution)),

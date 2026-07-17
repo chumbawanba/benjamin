@@ -11,9 +11,9 @@ export default defineConfig({
       manifest: {
         name: 'Benjamin',
         short_name: 'Benjamin',
-        description: 'Watchlist + checklists + agente de avaliação de investimentos',
-        theme_color: '#111827',
-        background_color: '#111827',
+        description: 'Watchlist + estratégias + agente de avaliação de investimentos',
+        theme_color: '#07423e',
+        background_color: '#020617',
         display: 'standalone',
         start_url: '/',
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
