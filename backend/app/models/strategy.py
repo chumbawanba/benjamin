@@ -17,6 +17,10 @@ class StrategyTemplate(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # "short_term" | "long_term" | None (sem horizonte definido). Validado em
+    # app/schemas/common.py (VALID_HORIZONS) — usado para agrupar/etiquetar
+    # sinais no Overview.
+    horizon: Mapped[str | None] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

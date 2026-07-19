@@ -11,6 +11,9 @@ dist/
 *.egg-info/
 .vite/
 coverage/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
 *.log
 .DS_Store
 .idea/

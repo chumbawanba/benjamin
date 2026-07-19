@@ -10,6 +10,7 @@ percentagem, daí a divisão por 100), marketCapitalization (em milhões, daí a
 multiplicação por 1_000_000), epsTTM, totalDebt/totalEquityAnnual.
 """
 import logging
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -77,6 +78,49 @@ async def get_company_news(ticker: str, days: int = 7, limit: int = 5) -> list[d
             "published_at": datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None,
         })
     return out
+
+
+MARKET_INDEX_PROXIES = [
+    ("SPY", "S&P 500"),
+    ("QQQ", "Nasdaq 100"),
+    ("DIA", "Dow Jones"),
+]
+
+
+async def get_market_pulse(news_limit: int = 8) -> dict:
+    """Visão geral do mercado: variação % de hoje de 3 ETFs-proxy dos
+    principais índices (SPY/QQQ/DIA, via Finnhub /quote) + notícias gerais
+    recentes (Finnhub /news?category=general). Usado pelo resumo do analista
+    (analyst.py). Nunca lança exceção — degrada graciosamente (mesmo padrão
+    de search_tickers/get_company_news), já que isto é só contexto extra
+    para o LLM, não deve impedir a geração do resumo."""
+    indices = []
+    for symbol, label in MARKET_INDEX_PROXIES:
+        change_pct = None
+        try:
+            quote = await _finnhub_get("quote", {"symbol": symbol})
+            if isinstance(quote, dict):
+                change_pct = quote.get("dp")
+        except Exception:
+            logger.warning("Finnhub indisponível a obter cotação de %s", symbol, exc_info=True)
+        indices.append({"symbol": symbol, "label": label, "change_pct": change_pct})
+
+    try:
+        data = await _finnhub_get("news", {"category": "general"})
+    except Exception:
+        logger.warning("Finnhub indisponível a obter notícias gerais", exc_info=True)
+        data = []
+    news = []
+    if isinstance(data, list):
+        for item in data[:news_limit]:
+            if not item.get("headline"):
+                continue
+            news.append({
+                "headline": item.get("headline"),
+                "source": item.get("source"),
+                "url": item.get("url"),
+            })
+    return {"indices": indices, "news": news}
 
 
 async def search_tickers(query: str, limit: int = 8) -> list[dict]:
@@ -283,6 +327,57 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
         market_cap=int(market_cap * 1_000_000) if market_cap else None,
     ))
     await db.flush()
+
+
+async def get_price_history(db: AsyncSession, stock_id: uuid.UUID, days: int = 90) -> list[PriceSnapshot]:
+    """Últimos `days` snapshots de preço (ordem cronológica ascendente), para
+    gráficos/sparklines. Usado na página de detalhe da ação."""
+    rows = (
+        await db.execute(
+            select(PriceSnapshot)
+            .where(PriceSnapshot.stock_id == stock_id, PriceSnapshot.close.is_not(None))
+            .order_by(PriceSnapshot.date.desc())
+            .limit(days)
+        )
+    ).scalars().all()
+    return list(reversed(rows))
+
+
+async def get_price_change(db: AsyncSession, stock_id: uuid.UUID) -> tuple[Decimal | None, Decimal | None]:
+    """Devolve (último fecho, variação % face ao fecho anterior). Usado para o
+    "day change" colorido no Overview/Watchlist — independente de quando a
+    última avaliação correu, ao contrário de `price_at_evaluation`."""
+    rows = (
+        await db.execute(
+            select(PriceSnapshot.close)
+            .where(PriceSnapshot.stock_id == stock_id, PriceSnapshot.close.is_not(None))
+            .order_by(PriceSnapshot.date.desc())
+            .limit(2)
+        )
+    ).scalars().all()
+    if not rows:
+        return None, None
+    last = rows[0]
+    if len(rows) < 2 or not rows[1]:
+        return last, None
+    previous = rows[1]
+    if previous == 0:
+        return last, None
+    change_pct = (last - previous) / previous * 100
+    return last, Decimal(str(round(float(change_pct), 4)))
+
+
+async def get_latest_fundamentals(db: AsyncSession, stock_id: uuid.UUID) -> FundamentalsSnapshot | None:
+    """Snapshot de fundamentais mais recente conhecido para a ação. Usado no
+    backtest/otimizador (backtest_core.py), que trata os fundamentais como
+    constantes ao longo de todo o período simulado — a app só guarda o
+    snapshot mais recente, não um histórico diário de fundamentais."""
+    return (
+        await db.execute(
+            select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock_id)
+            .order_by(FundamentalsSnapshot.date.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 def _dec(value) -> Decimal | None:

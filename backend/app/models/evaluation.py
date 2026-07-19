@@ -17,7 +17,7 @@ class Evaluation(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     stock_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("stocks.id"), nullable=False)
     strategy_template_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("strategy_templates.id"), nullable=False
+        ForeignKey("strategy_templates.id", ondelete="CASCADE"), nullable=False
     )
     run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     buy_score: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("0"))
@@ -38,7 +38,9 @@ class EvaluationDetail(Base):
     evaluation_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("evaluations.id", ondelete="CASCADE"), nullable=False
     )
-    strategy_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("strategy_items.id"), nullable=False)
+    strategy_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("strategy_items.id", ondelete="CASCADE"), nullable=False
+    )
     observed_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     contribution: Mapped[Decimal] = mapped_column(Numeric(6, 2), default=Decimal("0"))

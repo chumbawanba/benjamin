@@ -27,6 +27,77 @@ Fases do SPEC secção 10:
     (`GET /watchlist/news`, agregando Finnhub `/company-news` por cada ticker da watchlist,
     resiliente a falhas).
 - [~] Fase 7 — Scheduler APScheduler (sáb 08:00 UTC) + email resumo FEITOS; docker-compose.prod.yml com Caddy e README de deploy Hetzner POR FAZER
+- [x] Fase 8 (parcial) — UX review vs. apps concorrentes (investing.com, Yahoo Finance, TradingView,
+  Simply Wall St) + itens "near-term" implementados (2026-07-18): ver secção abaixo.
+
+## Portfolio real + exposição no Benjamin (2026-07-19)
+Nova entidade `Position` (`positions` table, migração `b2c3d4e5f6a7`), independente da
+watchlist: quantidade + preço médio de custo por ação, uma posição por ação por
+utilizador (sem histórico de transações — editar substitui os valores). Endpoints
+`GET/POST/PUT/DELETE /portfolio`; valor de mercado e P&L não realizado são calculados
+on-the-fly a cada pedido a partir do último `PriceSnapshot`, nunca gravados. Página
+`/portfolio` (form de adicionar + lista com editar/remover inline) e `PortfolioSummaryCard`
+(custo/valor/P&L compacto, link para detalhe) no topo do Overview — só aparece se o
+utilizador tiver pelo menos uma posição.
+
+`analyst._build_context` passou a incluir uma secção "Portfólio do utilizador" (posições,
+peso % de cada uma no total, P&L) ANTES da watchlist, e cada item da watchlist é agora
+marcado como "já possui"/"não possui" cruzando com `Position.stock_id`. O
+`DEFAULT_SYSTEM_PROMPT` foi atualizado para pedir ao Benjamin que fale de concentração de
+risco e de sinais de compra na watchlist em ações ainda não possuídas (oportunidades) —
+prompts personalizados por utilizador não foram tocados, só a predefinição.
+
+Limitação conhecida: soma de custo/valor do portfolio assume uma única moeda (sem
+conversão FX) — razoável para o MVP mas fica errado se o utilizador tiver posições em
+moedas diferentes.
+
+## UX review + Fase 8 — quick wins (2026-07-18)
+Comparação com apps semelhantes identificou 4 lacunas de alto impacto e baixo esforço,
+já implementadas:
+- **Variação diária colorida**: `market_data.get_price_change()` calcula (último fecho,
+  variação % face ao fecho anterior) a partir de `price_snapshots` — independente de quando
+  a última avaliação correu (ao contrário de `price_at_evaluation`). Exposto em
+  `WatchlistItemOut.last_price`/`price_change_pct`, renderizado pelo componente
+  `PriceChange.tsx` (verde/vermelho) no Overview e na Watchlist.
+- **Dedup de notícias**: `GET /watchlist/news` deduplicava por url (fallback: headline) —
+  a Finnhub devolve por vezes a mesma notícia de mercado geral para vários tickers.
+- **Avaliação automática ao adicionar**: `POST /watchlist` corre agora todas as estratégias
+  ativas do utilizador contra a ação recém-adicionada (mesmo padrão do `weekly_job` no
+  scheduler), para não aparecer com "Buy 0 / Sell 0" sem contexto até se ir ao Feed
+  manualmente. Falhas na avaliação são logadas mas não bloqueiam o add (`try/except` por
+  template).
+- **Página de detalhe da ação** (`StockDetail.tsx`, rota `/stocks/:id`, backend
+  `GET /watchlist/{item_id}/detail`): histórico de preço (sparkline via `Sparkline.tsx`,
+  sem dependências externas), todos os 9 indicadores atuais com descrição, fundamentais,
+  e o critério-a-critério da última avaliação (nome, métrica, threshold, valor observado,
+  passou/falhou, contribuição). Tickers no Overview/Watchlist agora têm link para lá.
+
+Ainda por implementar (identificado na review, não pedido ainda): sparkline também no
+Overview/Watchlist (hoje só na StockDetail), gráfico de score ao longo do tempo (os dados já
+existem em `evaluations`, é só uma view nova), alertas de preço em tempo real, e tracking de
+posições/portfólio (fora do MVP original — precisa de decisão do utilizador antes de avançar).
+
+## Horizonte de estratégia + sinais agrupados + otimizador (2026-07-18)
+- `StrategyTemplate.horizon` (`short_term`/`medium_term`/`long_term`/`null`, migração
+  `d4f8b1c6e0a2`) — **nota importante**: esta migração não corria sozinha em containers `api`
+  já em execução (o `alembic upgrade head` só corre no arranque do container); se `GET
+  /strategies` der 503/500 com `UndefinedColumnError`, correr
+  `docker compose exec api alembic upgrade head` sem precisar de recriar o container.
+- `GET /evaluations/latest-by-strategy` agrupa os sinais BUY/SELL mais recentes (HOLD omitido)
+  por estratégia ativa; o Overview mostra uma secção por estratégia com badge de horizonte. As
+  setas ▲▼ continuam a escrever em `WatchlistItem.display_order` (ordem mestre), trocando a
+  posição dos dois stocks vizinhos dentro do grupo visível.
+- Duas estratégias reais criadas como exemplo: "Valor a longo prazo" (fundamentalista: P/E,
+  dívida/capital próprio, EPS, dividendo) e "Swing a médio prazo" (RSI + P/E).
+- **Otimizador** (`backend/app/services/backtest_core.py`, puro/testável): `POST
+  /strategies/{id}/optimize` faz um backtest greedy (forward selection) sobre ~12 meses de
+  histórico de preços de toda a watchlist, escolhendo até 6 critérios (de um catálogo de
+  indicadores comparáveis entre ações — RSI, rácios; SMA/preço ficam de fora por não serem
+  comparáveis entre ações diferentes) que maximizem o retorno simulado. Devolve uma proposta
+  (não altera a estratégia); o frontend (`Strategies.tsx`) mostra o resultado vs
+  comprar-e-manter e só aplica (substitui os critérios via DELETE+POST `/items`) se o
+  utilizador confirmar. Limitação conhecida: fundamentais tratados como constantes (só existe
+  o snapshot mais recente, não histórico diário), sem custos de transação.
 
 ## Validação (sessão 2026-07-16)
 - `pytest` corrido localmente pelo utilizador: **33 passed**. Suite completa verde (16 núcleo +

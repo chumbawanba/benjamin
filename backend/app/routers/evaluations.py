@@ -7,9 +7,11 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Evaluation, StrategyTemplate, User, WatchlistItem
-from app.schemas.common import EvaluationOut, RunEvaluationIn
+from app.schemas.common import (
+    EvaluationOut, RunEvaluationIn, StockOut, StrategySignalGroupOut, StrategySignalOut,
+)
 from app.security import get_current_user
-from app.services import agent
+from app.services import agent, market_data
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
@@ -77,6 +79,60 @@ async def latest_evaluations(
             out.append(row)
     out.sort(key=lambda e: float(e.buy_score), reverse=True)
     return out
+
+
+@router.get("/latest-by-strategy", response_model=list[StrategySignalGroupOut])
+async def latest_by_strategy(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """Sinais BUY/SELL mais recentes, agrupados por estratégia ativa (HOLD é
+    omitido). Usado no separador "Sinais" do Overview — em vez de uma lista
+    plana da watchlist, cada estratégia mostra só as ações onde disparou um
+    sinal de compra ou venda. Ordem dentro de cada grupo segue a ordem manual
+    da watchlist (display_order)."""
+    templates = (
+        await db.execute(
+            select(StrategyTemplate).where(
+                StrategyTemplate.user_id == user.id, StrategyTemplate.is_active.is_(True)
+            )
+        )
+    ).scalars().all()
+    watchlist_items = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.user_id == user.id)
+            .order_by(WatchlistItem.display_order.asc(), WatchlistItem.added_at.desc())
+        )
+    ).scalars().all()
+
+    groups = []
+    for template in templates:
+        signals = []
+        for item in watchlist_items:
+            evaluation = (
+                await db.execute(
+                    select(Evaluation).where(
+                        Evaluation.user_id == user.id,
+                        Evaluation.stock_id == item.stock_id,
+                        Evaluation.strategy_template_id == template.id,
+                    ).order_by(Evaluation.run_at.desc()).limit(1)
+                )
+            ).scalar_one_or_none()
+            if evaluation is None or evaluation.recommendation == "HOLD":
+                continue
+            last_price, price_change_pct = await market_data.get_price_change(db, item.stock_id)
+            signals.append(StrategySignalOut(
+                stock=StockOut.model_validate(item.stock),
+                recommendation=evaluation.recommendation,
+                buy_score=evaluation.buy_score, sell_score=evaluation.sell_score,
+                run_at=evaluation.run_at,
+                last_price=last_price, price_change_pct=price_change_pct,
+            ))
+        groups.append(StrategySignalGroupOut(
+            strategy_id=template.id, strategy_name=template.name,
+            horizon=template.horizon, signals=signals,
+        ))
+    return groups
 
 
 @router.get("", response_model=list[EvaluationOut])

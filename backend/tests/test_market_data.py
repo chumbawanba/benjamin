@@ -1,9 +1,11 @@
 """Testes unitários para o backfill de perfil (nome/exchange/sector/currency)
 em falta — cobre o caso em que a Finnhub estava indisponível/rate-limited no
 momento em que a stock foi criada (ver validate_and_create_stock)."""
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
-from app.models import Stock
+from app.models import PriceSnapshot, Stock
 from app.services import market_data
 
 
@@ -44,3 +46,72 @@ async def test_backfill_profile_survives_finnhub_failure(db_session):
         await market_data._backfill_profile(db_session, stock)  # não deve lançar
 
     assert stock.name is None
+
+
+async def test_get_price_change_computes_pct(db_session):
+    stock = Stock(ticker="NVDA")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    db_session.add(PriceSnapshot(stock_id=stock.id, date=today - timedelta(days=1), close=Decimal("100.00")))
+    db_session.add(PriceSnapshot(stock_id=stock.id, date=today, close=Decimal("105.00")))
+    await db_session.flush()
+
+    last, change_pct = await market_data.get_price_change(db_session, stock.id)
+
+    assert last == Decimal("105.00")
+    assert change_pct == Decimal("5.0")
+
+
+async def test_get_price_change_single_snapshot_has_no_pct(db_session):
+    stock = Stock(ticker="AMZN")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    db_session.add(PriceSnapshot(stock_id=stock.id, date=today, close=Decimal("50.00")))
+    await db_session.flush()
+
+    last, change_pct = await market_data.get_price_change(db_session, stock.id)
+
+    assert last == Decimal("50.00")
+    assert change_pct is None
+
+
+async def test_get_price_change_no_snapshots(db_session):
+    stock = Stock(ticker="META")
+    db_session.add(stock)
+    await db_session.flush()
+
+    last, change_pct = await market_data.get_price_change(db_session, stock.id)
+
+    assert last is None
+    assert change_pct is None
+
+
+async def test_get_market_pulse_happy_path():
+    quote = {"c": 500.0, "dp": 1.23}
+    news = [{"headline": "Mercado sobe", "source": "Reuters", "url": "http://x"}, {"headline": None}]
+
+    async def fake_finnhub_get(path, params):
+        if path == "quote":
+            return quote
+        if path == "news":
+            return news
+        raise AssertionError(f"unexpected path {path}")
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
+        pulse = await market_data.get_market_pulse()
+
+    assert len(pulse["indices"]) == 3  # SPY, QQQ, DIA
+    assert all(idx["change_pct"] == 1.23 for idx in pulse["indices"])
+    # a notícia sem headline é descartada
+    assert pulse["news"] == [{"headline": "Mercado sobe", "source": "Reuters", "url": "http://x"}]
+
+
+async def test_get_market_pulse_survives_finnhub_failure():
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=Exception("boom"))):
+        pulse = await market_data.get_market_pulse()  # não deve lançar
+
+    assert len(pulse["indices"]) == 3
+    assert all(idx["change_pct"] is None for idx in pulse["indices"])
+    assert pulse["news"] == []

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     scheduler_enabled: bool = True
     finnhub_api_key: str = ""
     twelvedata_api_key: str = ""
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -1,26 +1,68 @@
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Evaluation, Stock, User, WatchlistItem
+from app.models import (
+    Evaluation, FundamentalsSnapshot, Stock, StrategyItem, StrategyTemplate, User, WatchlistItem,
+)
 from app.schemas.common import (
+    EvaluationCriterionOut,
     EvaluationSummaryOut,
+    FundamentalsOut,
+    IndicatorValueOut,
     NewsItemOut,
+    PricePointOut,
+    StockDetailOut,
+    StockOut,
     TickerSearchResult,
     WatchlistItemIn,
     WatchlistItemOut,
     WatchlistReorderIn,
 )
 from app.security import get_current_user
-from app.services import market_data
+from app.services import agent, indicators, market_data
+from app.services.indicators_core import INDICATORS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/watchlist", tags=["watchlist"])
+
+
+def _rolling_sma(period: int, closes: list[Decimal | None]) -> list[float | None]:
+    """Média móvel simples causal (só olha para trás), vetorizada com pandas —
+    usada para desenhar a linha SMA_200 no gráfico da StockDetail. Mesma
+    técnica do otimizador (backtest_core.py): rolling().mean() dá o mesmo
+    resultado que recalcular dia a dia, mas em O(n) em vez de O(n²)."""
+    s = pd.Series([float(c) if c is not None else None for c in closes], dtype=float)
+    rolling = s.rolling(period).mean()
+    return [None if pd.isna(v) else float(v) for v in rolling]
+
+
+async def _to_dto(db: AsyncSession, user_id: uuid.UUID, item: WatchlistItem) -> WatchlistItemOut:
+    """Constrói o WatchlistItemOut com última avaliação + variação de preço.
+    Partilhado entre list_watchlist e add_to_watchlist (que devolve o item já
+    com a avaliação automática feita)."""
+    latest = (
+        await db.execute(
+            select(Evaluation)
+            .where(Evaluation.user_id == user_id, Evaluation.stock_id == item.stock_id)
+            .order_by(Evaluation.run_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    dto = WatchlistItemOut.model_validate(item)
+    dto.latest_evaluation = EvaluationSummaryOut.model_validate(latest) if latest else None
+    dto.last_price, dto.price_change_pct = await market_data.get_price_change(db, item.stock_id)
+    return dto
 
 
 @router.get("/search", response_model=list[TickerSearchResult])
@@ -51,8 +93,21 @@ async def watchlist_news(
         return []
     results = await asyncio.gather(*(market_data.get_company_news(t) for t in tickers))
     items = [item for group in results for item in group if item.get("headline")]
-    items.sort(key=lambda i: i["published_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return items[:limit]
+
+    # A mesma notícia (ex: "mercado em queda hoje") costuma vir repetida para
+    # vários tickers — a Finnhub devolve-a em cada /company-news relevante.
+    # Dedup por url (fallback: headline) mantendo a primeira ocorrência.
+    seen: set[str] = set()
+    deduped = []
+    for item in items:
+        key = item.get("url") or item.get("headline")
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+
+    deduped.sort(key=lambda i: i["published_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    return deduped[:limit]
 
 
 @router.get("", response_model=list[WatchlistItemOut])
@@ -67,20 +122,102 @@ async def list_watchlist(
             .order_by(WatchlistItem.display_order.asc(), WatchlistItem.added_at.desc())
         )
     ).scalars().all()
-    out = []
-    for item in items:
-        latest = (
+    return [await _to_dto(db, user.id, item) for item in items]
+
+
+@router.get("/{item_id}/detail", response_model=StockDetailOut)
+async def watchlist_item_detail(
+    item_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Detalhe de uma ação da watchlist: histórico de preço, todos os
+    indicadores atuais, fundamentais e o critério-a-critério da última
+    avaliação. Usado na página StockDetail (drill-down a partir de um ticker)."""
+    item = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.id == item_id, WatchlistItem.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+
+    stock = item.stock
+    await market_data.ensure_fresh(db, stock)
+
+    last_price, price_change_pct = await market_data.get_price_change(db, stock.id)
+    # 365 dias (máximo guardado pelo backfill) para dar espaço a uma SMA_200
+    # com histórico suficiente — com menos dias a média fica sempre None.
+    history_rows = await market_data.get_price_history(db, stock.id, days=365)
+    sma_200_series = _rolling_sma(200, [r.close for r in history_rows])
+    price_history = [
+        PricePointOut(date=r.date, close=r.close, sma_200=sma)
+        for r, sma in zip(history_rows, sma_200_series)
+    ]
+
+    indicator_values = [
+        IndicatorValueOut(
+            key=key, value=await indicators.get_indicator(db, stock.id, key),
+            description=spec.get("description"),
+        )
+        for key, spec in INDICATORS.items()
+    ]
+
+    fundamentals_row = (
+        await db.execute(
+            select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id)
+            .order_by(FundamentalsSnapshot.date.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    fundamentals = FundamentalsOut.model_validate(fundamentals_row) if fundamentals_row else None
+
+    latest_eval = (
+        await db.execute(
+            select(Evaluation).options(selectinload(Evaluation.details))
+            .where(Evaluation.user_id == user.id, Evaluation.stock_id == stock.id)
+            .order_by(Evaluation.run_at.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+
+    strategy_name = None
+    criteria: list[EvaluationCriterionOut] = []
+    if latest_eval is not None:
+        template = (
             await db.execute(
-                select(Evaluation)
-                .where(Evaluation.user_id == user.id, Evaluation.stock_id == item.stock_id)
-                .order_by(Evaluation.run_at.desc())
-                .limit(1)
+                select(StrategyTemplate).where(StrategyTemplate.id == latest_eval.strategy_template_id)
             )
         ).scalar_one_or_none()
-        dto = WatchlistItemOut.model_validate(item)
-        dto.latest_evaluation = EvaluationSummaryOut.model_validate(latest) if latest else None
-        out.append(dto)
-    return out
+        strategy_name = template.name if template else None
+
+        item_ids = [d.strategy_item_id for d in latest_eval.details]
+        strategy_items = (
+            await db.execute(select(StrategyItem).where(StrategyItem.id.in_(item_ids)))
+        ).scalars().all()
+        items_by_id = {si.id: si for si in strategy_items}
+        for d in latest_eval.details:
+            si = items_by_id.get(d.strategy_item_id)
+            if si is None:
+                continue
+            criteria.append(EvaluationCriterionOut(
+                name=si.name, metric=si.metric, operator=si.operator,
+                threshold_value=si.threshold_value, threshold_value_max=si.threshold_value_max,
+                weight=si.weight, direction=si.direction,
+                observed_value=d.observed_value, passed=d.passed, contribution=d.contribution,
+            ))
+
+    await db.commit()  # ensure_fresh/get_indicator podem ter gravado cache novo
+
+    return StockDetailOut(
+        stock=StockOut.model_validate(stock),
+        last_price=last_price, price_change_pct=price_change_pct,
+        price_history=price_history,
+        indicators=indicator_values,
+        fundamentals=fundamentals,
+        latest_evaluation=EvaluationSummaryOut.model_validate(latest_eval) if latest_eval else None,
+        strategy_name=strategy_name,
+        criteria=criteria,
+    )
 
 
 @router.put("/reorder", status_code=204)
@@ -140,13 +277,33 @@ async def add_to_watchlist(
     )
     db.add(item)
     await db.commit()
+
+    # Avalia já com as estratégias ativas do utilizador — sem isto a ação
+    # ficava com "Buy 0 / Sell 0" sem contexto até alguém correr o Feed
+    # manualmente, o que parece um bug a quem acabou de a adicionar.
+    templates = (
+        await db.execute(
+            select(StrategyTemplate).where(
+                StrategyTemplate.user_id == user.id, StrategyTemplate.is_active.is_(True)
+            )
+        )
+    ).scalars().all()
+    for template in templates:
+        try:
+            await agent.evaluate(db, stock.id, template.id, user.id)
+        except Exception:
+            logger.exception(
+                "Falha ao avaliar %s / %s logo após adicionar à watchlist", stock.ticker, template.name
+            )
+    await db.commit()
+
     item = (
         await db.execute(
             select(WatchlistItem).options(selectinload(WatchlistItem.stock))
             .where(WatchlistItem.id == item.id)
         )
     ).scalar_one()
-    return WatchlistItemOut.model_validate(item)
+    return await _to_dto(db, user.id, item)
 
 
 @router.delete("/{item_id}", status_code=204)

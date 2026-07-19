@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { NewsItem, WatchlistItem } from '../api/types';
-import ScoreBadge from '../components/ScoreBadge';
+import { Horizon, NewsItem, StrategySignal, StrategySignalGroup, WatchlistItem } from '../api/types';
+import AnalystSummaryCard from '../components/AnalystSummaryCard';
+import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
+import PriceChange from '../components/PriceChange';
+import RecommendationBadge from '../components/RecommendationBadge';
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -15,10 +18,18 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('pt-PT');
 }
 
+function horizonLabel(h: Horizon | null): string | null {
+  if (h === 'short_term') return 'Curto prazo';
+  if (h === 'medium_term') return 'Médio prazo';
+  if (h === 'long_term') return 'Longo prazo';
+  return null;
+}
+
 type Tab = 'sinais' | 'noticias';
 
 export default function Overview() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [groups, setGroups] = useState<StrategySignalGroup[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [tab, setTab] = useState<Tab>('sinais');
   const [loading, setLoading] = useState(true);
@@ -28,12 +39,14 @@ export default function Overview() {
   async function load() {
     setLoading(true);
     try {
-      const [wl, newsItems] = await Promise.all([
+      const [wl, newsItems, signalGroups] = await Promise.all([
         api.get<WatchlistItem[]>('/watchlist'),
         api.get<NewsItem[]>('/watchlist/news'),
+        api.get<StrategySignalGroup[]>('/evaluations/latest-by-strategy'),
       ]);
       setWatchlist(wl);
       setNews(newsItems);
+      setGroups(signalGroups);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar');
     } finally {
@@ -45,33 +58,41 @@ export default function Overview() {
     load();
   }, []);
 
-  const summary = useMemo(() => {
-    const counts = { BUY: 0, SELL: 0, HOLD: 0, none: 0 };
-    watchlist.forEach((item) => {
-      const rec = item.latest_evaluation?.recommendation;
-      if (rec === 'BUY' || rec === 'SELL' || rec === 'HOLD') counts[rec] += 1;
-      else counts.none += 1;
-    });
-    return counts;
+  const watchlistByStockId = useMemo(() => {
+    const map = new Map<string, WatchlistItem>();
+    watchlist.forEach((w) => map.set(w.stock.id, w));
+    return map;
   }, [watchlist]);
 
   async function persistOrder(items: WatchlistItem[]) {
     setReorderError(null);
     try {
       await api.put('/watchlist/reorder', { ordered_ids: items.map((i) => i.id) });
+      const signalGroups = await api.get<StrategySignalGroup[]>('/evaluations/latest-by-strategy');
+      setGroups(signalGroups);
     } catch (err) {
       setReorderError(err instanceof ApiError ? err.message : 'Erro ao gravar ordem');
       await load(); // repõe a ordem guardada no servidor
     }
   }
 
-  function moveItem(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= watchlist.length) return;
+  function swapWatchlistOrder(stockIdA: string, stockIdB: string) {
+    const itemA = watchlistByStockId.get(stockIdA);
+    const itemB = watchlistByStockId.get(stockIdB);
+    if (!itemA || !itemB) return;
     const next = [...watchlist];
-    [next[index], next[target]] = [next[target], next[index]];
+    const idxA = next.findIndex((w) => w.id === itemA.id);
+    const idxB = next.findIndex((w) => w.id === itemB.id);
+    if (idxA === -1 || idxB === -1) return;
+    [next[idxA], next[idxB]] = [next[idxB], next[idxA]];
     setWatchlist(next);
     void persistOrder(next);
+  }
+
+  function moveSignal(signals: StrategySignal[], index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= signals.length) return;
+    swapWatchlistOrder(signals[index].stock.id, signals[target].stock.id);
   }
 
   return (
@@ -84,20 +105,8 @@ export default function Overview() {
         <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>
       ) : (
         <>
-          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 flex gap-3 text-center">
-            <div className="flex-1">
-              <p className="text-2xl font-bold text-green-600 dark:text-emerald-400">{summary.BUY}</p>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Comprar</p>
-            </div>
-            <div className="flex-1 border-l border-gray-100 dark:border-slate-800">
-              <p className="text-2xl font-bold text-red-600 dark:text-rose-400">{summary.SELL}</p>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Vender</p>
-            </div>
-            <div className="flex-1 border-l border-gray-100 dark:border-slate-800">
-              <p className="text-2xl font-bold text-gray-400 dark:text-slate-400">{summary.HOLD}</p>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Manter</p>
-            </div>
-          </div>
+          <AnalystSummaryCard />
+          <PortfolioSummaryCard />
 
           <div className="flex border-b border-gray-200 dark:border-slate-800 mb-4">
             <button
@@ -133,51 +142,92 @@ export default function Overview() {
                   </Link>
                   .
                 </p>
+              ) : groups.length === 0 ? (
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  Ainda não tens estratégias ativas.{' '}
+                  <Link to="/strategies" className="text-petrol-600 dark:text-petrol-400">
+                    Cria uma estratégia
+                  </Link>
+                  .
+                </p>
               ) : (
-                <ul className="space-y-2">
-                  {watchlist.map((item, index) => (
-                    <li
-                      key={item.id}
-                      className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="flex flex-col shrink-0 -my-1">
-                          <button
-                            onClick={() => moveItem(index, -1)}
-                            disabled={index === 0}
-                            aria-label="Mover para cima"
-                            className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            onClick={() => moveItem(index, 1)}
-                            disabled={index === watchlist.length - 1}
-                            aria-label="Mover para baixo"
-                            className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
-                          >
-                            ▼
-                          </button>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-gray-900 dark:text-slate-100">{item.stock.ticker}</p>
-                          <p className="text-xs text-gray-500 dark:text-slate-400">
-                            {item.latest_evaluation?.price_at_evaluation ?? '—'}
-                            {item.latest_evaluation && ` · avaliado ${formatDate(item.latest_evaluation.run_at)}`}
-                          </p>
-                        </div>
+                <div className="space-y-5">
+                  {groups.map((group) => (
+                    <section key={group.strategy_id}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">
+                          {group.strategy_name}
+                        </h2>
+                        {horizonLabel(group.horizon) && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-petrol-50 text-petrol-700 dark:bg-petrol-500/15 dark:text-petrol-400">
+                            {horizonLabel(group.horizon)}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400 dark:text-slate-500">
+                          {group.signals.length} sinal{group.signals.length === 1 ? '' : 'is'}
+                        </span>
                       </div>
-                      {item.latest_evaluation ? (
-                        <div className="flex gap-2 shrink-0">
-                          <ScoreBadge kind="buy" score={item.latest_evaluation.buy_score} />
-                          <ScoreBadge kind="sell" score={item.latest_evaluation.sell_score} />
-                        </div>
+
+                      {group.signals.length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-slate-500 pl-1">
+                          Sem sinais de compra ou venda no momento.
+                        </p>
                       ) : (
-                        <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">sem avaliação</span>
+                        <ul className="space-y-2">
+                          {group.signals.map((signal, index) => {
+                            const wlItem = watchlistByStockId.get(signal.stock.id);
+                            return (
+                              <li
+                                key={`${group.strategy_id}-${signal.stock.id}`}
+                                className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="flex flex-col shrink-0 -my-1">
+                                    <button
+                                      onClick={() => moveSignal(group.signals, index, -1)}
+                                      disabled={index === 0}
+                                      aria-label="Mover para cima"
+                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                                    >
+                                      ▲
+                                    </button>
+                                    <button
+                                      onClick={() => moveSignal(group.signals, index, 1)}
+                                      disabled={index === group.signals.length - 1}
+                                      aria-label="Mover para baixo"
+                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <Link
+                                      to={wlItem ? `/stocks/${wlItem.id}` : '#'}
+                                      className="font-semibold text-gray-900 dark:text-slate-100 hover:text-petrol-600 dark:hover:text-petrol-400"
+                                    >
+                                      {signal.stock.ticker}
+                                    </Link>
+                                    <p className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1.5 flex-wrap">
+                                      <PriceChange
+                                        price={signal.last_price}
+                                        changePct={signal.price_change_pct}
+                                        currency={signal.stock.currency}
+                                      />
+                                      <span>· avaliado {formatDate(signal.run_at)}</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="shrink-0">
+                                  <RecommendationBadge recommendation={signal.recommendation} />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       )}
-                    </li>
+                    </section>
                   ))}
-                </ul>
+                </div>
               )}
             </>
           )}

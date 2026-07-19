@@ -40,6 +40,7 @@ CREATE TABLE strategy_templates (
     user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
     name            VARCHAR(255) NOT NULL,          -- ex: "Estratégia Value", "Swing Trade"
     description     TEXT,
+    horizon         VARCHAR(20),                    -- 'short_term' | 'long_term' | NULL
     is_active       BOOLEAN DEFAULT TRUE,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
@@ -101,7 +102,7 @@ CREATE TABLE evaluations (
     id                  UUID PRIMARY KEY,
     user_id             UUID REFERENCES users(id),
     stock_id            UUID REFERENCES stocks(id),
-    strategy_template_id UUID REFERENCES strategy_templates(id),
+    strategy_template_id UUID REFERENCES strategy_templates(id) ON DELETE CASCADE,
     run_at              TIMESTAMP DEFAULT NOW(),
     score               DECIMAL(6,2),           -- score ponderado final
     recommendation      VARCHAR(10),            -- BUY | SELL | HOLD
@@ -113,7 +114,7 @@ CREATE TABLE evaluations (
 CREATE TABLE evaluation_details (
     id                  UUID PRIMARY KEY,
     evaluation_id       UUID REFERENCES evaluations(id) ON DELETE CASCADE,
-    strategy_item_id    UUID REFERENCES strategy_items(id),
+    strategy_item_id    UUID REFERENCES strategy_items(id) ON DELETE CASCADE,
     observed_value      DECIMAL(12,4),
     passed              BOOLEAN,
     contribution        DECIMAL(6,2)            -- pontos que este item deu ao score

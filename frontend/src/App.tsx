@@ -6,6 +6,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import Feed from './pages/Feed';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
+import Portfolio from './pages/Portfolio';
+import StockDetail from './pages/StockDetail';
 import StrategyEditor from './pages/StrategyEditor';
 import Strategies from './pages/Strategies';
 import Watchlist from './pages/Watchlist';
@@ -21,6 +23,8 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="/" element={<Overview />} />
                 <Route path="/watchlist" element={<Watchlist />} />
+                <Route path="/portfolio" element={<Portfolio />} />
+                <Route path="/stocks/:id" element={<StockDetail />} />
                 <Route path="/strategies" element={<Strategies />} />
                 <Route path="/strategies/:id" element={<StrategyEditor />} />
                 <Route path="/feed" element={<Feed />} />

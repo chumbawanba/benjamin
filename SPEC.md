@@ -189,23 +189,42 @@ Todas as queries filtram por `user_id` extraído do token — **nunca** aceitar 
 POST /auth/register        # MVP: protegido por env var ALLOW_REGISTRATION=false por defeito
 POST /auth/login           # -> {access_token}
 
-GET    /watchlist                      # itens + última evaluation de cada stock
+GET    /watchlist                      # itens + última evaluation + last_price/price_change_pct de cada stock
+GET    /watchlist/search?q=            # pesquisa tickers por nome/símbolo (Finnhub)
+GET    /watchlist/news?limit=20        # notícias agregadas por ticker da watchlist, deduplicadas
+GET    /watchlist/{item_id}/detail     # histórico de preço + indicadores + fundamentais + breakdown da última evaluation
 POST   /watchlist                      # body: {ticker, notes?, target_buy_price?, target_sell_price?}
                                        # se o ticker não existir em stocks, criar via Finnhub (validar que existe)
+                                       # corre logo as estratégias ativas do utilizador contra a nova ação
+PUT    /watchlist/reorder              # body: {ordered_ids: [uuid, ...]} — grava display_order manual
 DELETE /watchlist/{item_id}
 
 GET    /strategies
-POST   /strategies                     # {name, description?}
+POST   /strategies                     # {name, description?, horizon?}  horizon: short_term|medium_term|long_term|null
 PUT    /strategies/{id}
 DELETE /strategies/{id}
 POST   /strategies/{id}/items
 PUT    /strategies/items/{item_id}
 DELETE /strategies/items/{item_id}
 GET    /strategies/metrics             # lista as chaves do registry (para dropdowns no frontend)
+POST   /strategies/{id}/optimize       # backtest greedy sobre a watchlist inteira (~12 meses); devolve proposta de
+                                       # critérios + retorno simulado vs comprar-e-manter — não altera a estratégia,
+                                       # o cliente aplica via POST/DELETE .../items
 
 POST /evaluations/run                  # body: {template_id, stock_id?} — sem stock_id corre a watchlist toda
 GET  /evaluations/latest               # última evaluation por stock da watchlist (feed)
+GET  /evaluations/latest-by-strategy   # sinais BUY/SELL mais recentes agrupados por estratégia ativa (HOLD omitido, Overview)
 GET  /evaluations?stock_id=&limit=20   # histórico
+
+GET  /analyst/summary                  # último resumo do analista ("Benjamin") gerado (cache, não chama o LLM)
+POST /analyst/summary/refresh          # gera um novo resumo via OpenAI (portfolio + watchlist + mercado geral) — manual, sem scheduler
+GET  /analyst/prompt                   # prompt de sistema em uso (personalizado ou predefinição)
+PUT  /analyst/prompt                   # {prompt?} — guarda um prompt personalizado; null/vazio repõe a predefinição
+
+GET    /portfolio                      # posições reais (qty + custo médio) com valor de mercado e P&L não realizado calculados on-the-fly
+POST   /portfolio                      # body: {ticker, quantity, avg_cost} — 422 se já existir posição nesse ticker
+PUT    /portfolio/{position_id}        # body: {quantity, avg_cost} — substitui os valores (sem histórico de transações)
+DELETE /portfolio/{position_id}
 
 GET /health                            # sem auth: {"status": "ok", "db": true}
 ```

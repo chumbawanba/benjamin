@@ -23,5 +23,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Docker Desktop no Windows não propaga de forma fiável eventos de
+    // sistema de ficheiros (inotify) através do bind mount ./frontend:/srv —
+    // sem polling, o Vite fica a servir ficheiros desatualizados até o
+    // container ser reiniciado manualmente (bug real encontrado ao vivo).
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
   },
 });

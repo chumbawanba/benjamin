@@ -6,12 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import StrategyItem, StrategyTemplate, User
+from app.models import StrategyItem, StrategyTemplate, User, WatchlistItem
 from app.schemas.common import (
-    VALID_DIRECTIONS, VALID_OPERATORS,
-    StrategyItemIn, StrategyItemOut, StrategyTemplateIn, StrategyTemplateOut,
+    VALID_DIRECTIONS, VALID_HORIZONS, VALID_OPERATORS,
+    OptimizeResultOut, StrategyItemIn, StrategyItemOut, StrategyTemplateIn, StrategyTemplateOut,
 )
 from app.security import get_current_user
+from app.services import backtest_core, market_data
 from app.services.indicators_core import INDICATORS
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
@@ -28,6 +29,11 @@ def _validate_item(body: StrategyItemIn) -> None:
         raise HTTPException(status_code=422, detail="'between' requer threshold_value e threshold_value_max")
     if body.operator != "between" and body.threshold_value is None:
         raise HTTPException(status_code=422, detail="threshold_value é obrigatório")
+
+
+def _validate_template(body: StrategyTemplateIn) -> None:
+    if body.horizon is not None and body.horizon not in VALID_HORIZONS:
+        raise HTTPException(status_code=422, detail=f"Horizonte inválido: {body.horizon}")
 
 
 async def _get_owned_template(
@@ -71,6 +77,7 @@ async def list_strategies(user: User = Depends(get_current_user), db: AsyncSessi
 async def create_strategy(
     body: StrategyTemplateIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
+    _validate_template(body)
     template = StrategyTemplate(user_id=user.id, **body.model_dump())
     db.add(template)
     await db.commit()
@@ -82,11 +89,55 @@ async def update_strategy(
     template_id: uuid.UUID, body: StrategyTemplateIn,
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
+    _validate_template(body)
     template = await _get_owned_template(db, template_id, user.id)
     for key, value in body.model_dump().items():
         setattr(template, key, value)
     await db.commit()
     return await _get_owned_template(db, template_id, user.id)
+
+
+@router.post("/{template_id}/optimize", response_model=OptimizeResultOut)
+async def optimize_strategy(
+    template_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Sugere um conjunto de critérios (dentro de um catálogo de indicadores
+    comparáveis entre ações) que teria maximizado o retorno simulado nos
+    últimos ~12 meses de histórico de preços da watchlist inteira. Não altera
+    a estratégia — devolve uma proposta; o cliente decide se a aplica via os
+    endpoints normais de items (POST/DELETE .../items).
+
+    Backtest simplificado: fundamentais tratados como constantes (só existe o
+    snapshot mais recente), sem custos de transação. Serve como ponto de
+    partida, não como garantia de desempenho futuro."""
+    await _get_owned_template(db, template_id, user.id)
+
+    stock_rows = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.user_id == user.id)
+        )
+    ).scalars().all()
+    if not stock_rows:
+        raise HTTPException(status_code=400, detail="A watchlist está vazia — adiciona ações antes de otimizar.")
+
+    series_list = []
+    for item in stock_rows:
+        snapshots = await market_data.get_price_history(db, item.stock_id, days=365)
+        if len(snapshots) < backtest_core.MIN_HISTORY_DAYS:
+            continue
+        closes = [float(s.close) for s in snapshots]
+        fundamentals_row = await market_data.get_latest_fundamentals(db, item.stock_id)
+        observed_fundamentals = backtest_core.fundamentals_to_observed(fundamentals_row)
+        series_list.append(backtest_core.build_stock_series(item.stock.ticker, closes, observed_fundamentals))
+
+    if not series_list:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Histórico de preços insuficiente para otimizar (mínimo {backtest_core.MIN_HISTORY_DAYS} dias por ação).",
+        )
+
+    return backtest_core.optimize(series_list)
 
 
 @router.delete("/{template_id}", status_code=204)

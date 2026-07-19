@@ -1,11 +1,12 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field
 
 VALID_OPERATORS = {"<", ">", "<=", ">=", "==", "between"}
 VALID_DIRECTIONS = {"buy_signal", "sell_signal"}
+VALID_HORIZONS = {"short_term", "medium_term", "long_term"}
 
 
 # ---- Auth ----
@@ -62,12 +63,65 @@ class WatchlistItemOut(BaseModel):
     added_at: datetime
     display_order: int
     latest_evaluation: EvaluationSummaryOut | None = None
+    last_price: Decimal | None = None
+    price_change_pct: Decimal | None = None
 
     model_config = {"from_attributes": True}
 
 
 class WatchlistReorderIn(BaseModel):
     ordered_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+# ---- Detalhe de ação (página StockDetail) ----
+class PricePointOut(BaseModel):
+    date: date
+    close: Decimal | None
+    sma_200: float | None = None  # float de propósito (não Decimal) - ver OptimizeItemOut
+
+    model_config = {"from_attributes": True}
+
+
+class IndicatorValueOut(BaseModel):
+    key: str
+    value: float | None
+    description: str | None
+
+
+class FundamentalsOut(BaseModel):
+    date: date
+    pe_ratio: Decimal | None
+    eps: Decimal | None
+    debt_to_equity: Decimal | None
+    dividend_yield: Decimal | None
+    market_cap: int | None
+
+    model_config = {"from_attributes": True}
+
+
+class EvaluationCriterionOut(BaseModel):
+    name: str
+    metric: str
+    operator: str
+    threshold_value: Decimal | None
+    threshold_value_max: Decimal | None
+    weight: Decimal
+    direction: str
+    observed_value: Decimal | None
+    passed: bool | None
+    contribution: Decimal
+
+
+class StockDetailOut(BaseModel):
+    stock: StockOut
+    last_price: Decimal | None
+    price_change_pct: Decimal | None
+    price_history: list[PricePointOut]
+    indicators: list[IndicatorValueOut]
+    fundamentals: FundamentalsOut | None
+    latest_evaluation: EvaluationSummaryOut | None
+    strategy_name: str | None
+    criteria: list[EvaluationCriterionOut]
 
 
 class TickerSearchResult(BaseModel):
@@ -85,10 +139,51 @@ class NewsItemOut(BaseModel):
     published_at: datetime | None
 
 
+class AnalystSummaryOut(BaseModel):
+    summary: str | None
+    generated_at: datetime | None
+
+
+class AnalystPromptOut(BaseModel):
+    prompt: str
+    is_default: bool
+
+
+class AnalystPromptIn(BaseModel):
+    prompt: str | None = None  # None ou "" repõe a predefinição
+
+
+# ---- Portfolio (posições reais, distinto da watchlist) ----
+class PositionIn(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+    quantity: Decimal = Field(gt=0)
+    avg_cost: Decimal = Field(gt=0)
+
+
+class PositionUpdateIn(BaseModel):
+    quantity: Decimal = Field(gt=0)
+    avg_cost: Decimal = Field(gt=0)
+
+
+class PositionOut(BaseModel):
+    id: uuid.UUID
+    stock: StockOut
+    quantity: Decimal
+    avg_cost: Decimal
+    cost_total: Decimal
+    last_price: Decimal | None
+    price_change_pct: Decimal | None
+    market_value: Decimal | None
+    unrealized_pl: Decimal | None
+    unrealized_pl_pct: Decimal | None
+    updated_at: datetime
+
+
 # ---- Strategies ----
 class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
+    horizon: str | None = None
     is_active: bool = True
 
 
@@ -110,10 +205,32 @@ class StrategyItemOut(StrategyItemIn):
     model_config = {"from_attributes": True}
 
 
+class OptimizeItemOut(BaseModel):
+    """Usa float (não Decimal) de propósito: vem diretamente do backtest_core,
+    que trabalha com floats, e evita a serialização de Decimal como string em
+    JSON (ver PriceChange.tsx) — o frontend chama .toFixed() diretamente
+    nestes campos."""
+    name: str
+    metric: str
+    operator: str
+    threshold_value: float | None
+    threshold_value_max: float | None
+    weight: float
+    direction: str
+
+
+class OptimizeResultOut(BaseModel):
+    items: list[OptimizeItemOut]
+    backtest_return_pct: float
+    buy_and_hold_return_pct: float | None
+    stocks_evaluated: int
+
+
 class StrategyTemplateOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    horizon: str | None
     is_active: bool
     items: list[StrategyItemOut] = []
 
@@ -139,3 +256,21 @@ class EvaluationOut(EvaluationSummaryOut):
     stock_id: uuid.UUID
     strategy_template_id: uuid.UUID
     details: list[EvaluationDetailOut] = []
+
+
+# ---- Sinais agrupados por estratégia (Overview) ----
+class StrategySignalOut(BaseModel):
+    stock: StockOut
+    recommendation: str
+    buy_score: Decimal
+    sell_score: Decimal
+    run_at: datetime
+    last_price: Decimal | None
+    price_change_pct: Decimal | None
+
+
+class StrategySignalGroupOut(BaseModel):
+    strategy_id: uuid.UUID
+    strategy_name: str
+    horizon: str | None
+    signals: list[StrategySignalOut]

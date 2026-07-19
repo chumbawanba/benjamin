@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import { Evaluation, StrategyTemplate, WatchlistItem } from '../api/types';
-import ScoreBadge from '../components/ScoreBadge';
+import RecommendationBadge from '../components/RecommendationBadge';
 
 export default function Feed() {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -80,7 +80,7 @@ export default function Feed() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Feed</h1>
+      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Avaliações</h1>
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 flex gap-2 items-center">
         <select
@@ -121,12 +121,11 @@ export default function Feed() {
                 >
                   <p className="font-semibold text-gray-900 dark:text-slate-100">{tickerByStock.get(ev.stock_id) ?? ev.stock_id}</p>
                   <p className="text-xs text-gray-500 dark:text-slate-400">
-                    {ev.recommendation} · {ev.price_at_evaluation !== null ? ev.price_at_evaluation : '—'}
+                    {ev.price_at_evaluation !== null ? ev.price_at_evaluation : '—'}
                   </p>
                 </button>
-                <div className="flex gap-2 shrink-0">
-                  <ScoreBadge kind="buy" score={ev.buy_score} />
-                  <ScoreBadge kind="sell" score={ev.sell_score} />
+                <div className="shrink-0">
+                  <RecommendationBadge recommendation={ev.recommendation} />
                 </div>
               </div>
 

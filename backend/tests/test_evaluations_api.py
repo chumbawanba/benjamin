@@ -57,3 +57,41 @@ async def test_run_with_foreign_template(client, db_session, user_a, user_b, see
     resp = await client.post("/evaluations/run", json={"template_id": str(template.id)},
                              headers=headers_b)
     assert resp.status_code == 404
+
+
+async def test_latest_by_strategy_groups_and_excludes_hold(client, db_session, user_a, seeded_stock):
+    """Agrupa por estrategia ativa; HOLD fica de fora dos sinais; estrategia
+    inativa nao aparece nada (nem o grupo)."""
+    template = await _setup(db_session, user_a, seeded_stock)  # Value simples -> SELL
+
+    hold_template = StrategyTemplate(user_id=user_a.id, name="Nunca dispara", horizon="long_term")
+    db_session.add(hold_template)
+    await db_session.flush()
+    db_session.add(StrategyItem(
+        template_id=hold_template.id, name="Impossivel", metric="PE_RATIO",
+        operator=">", threshold_value=Decimal("1000"), weight=Decimal("1"),
+        direction="buy_signal",
+    ))
+    inactive_template = StrategyTemplate(user_id=user_a.id, name="Inativa", is_active=False)
+    db_session.add(inactive_template)
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post("/evaluations/run", json={"template_id": str(template.id)}, headers=headers)
+    await client.post("/evaluations/run", json={"template_id": str(hold_template.id)}, headers=headers)
+
+    resp = await client.get("/evaluations/latest-by-strategy", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    names = {g["strategy_name"] for g in body}
+    assert names == {"Value simples", "Nunca dispara"}  # "Inativa" fica de fora
+
+    value_group = next(g for g in body if g["strategy_name"] == "Value simples")
+    assert len(value_group["signals"]) == 1
+    assert value_group["signals"][0]["recommendation"] == "SELL"
+    assert value_group["horizon"] is None
+
+    hold_group = next(g for g in body if g["strategy_name"] == "Nunca dispara")
+    assert hold_group["signals"] == []
+    assert hold_group["horizon"] == "long_term"

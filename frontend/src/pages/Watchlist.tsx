@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { TickerSearchResult, WatchlistItem } from '../api/types';
-import ScoreBadge from '../components/ScoreBadge';
+import PriceChange from '../components/PriceChange';
+import RecommendationBadge from '../components/RecommendationBadge';
 
 const POPULAR_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B'];
 
@@ -10,6 +12,7 @@ export default function Watchlist() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingTicker, setAddingTicker] = useState<string | null>(null);
+  const [reorderError, setReorderError] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -63,6 +66,25 @@ export default function Watchlist() {
     } finally {
       setSearching(false);
     }
+  }
+
+  async function persistOrder(next: WatchlistItem[]) {
+    setReorderError(null);
+    try {
+      await api.put('/watchlist/reorder', { ordered_ids: next.map((i) => i.id) });
+    } catch (err) {
+      setReorderError(err instanceof ApiError ? err.message : 'Erro ao gravar ordem');
+      await load(); // repõe a ordem guardada no servidor
+    }
+  }
+
+  function moveItem(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target], next[index]];
+    setItems(next);
+    void persistOrder(next);
   }
 
   async function handleRemove(id: string) {
@@ -148,6 +170,7 @@ export default function Watchlist() {
       )}
 
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
+      {reorderError && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{reorderError}</p>}
 
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>
@@ -155,33 +178,49 @@ export default function Watchlist() {
         <p className="text-sm text-gray-500 dark:text-slate-400">Ainda não tens ações na watchlist.</p>
       ) : (
         <ul className="space-y-2">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li
               key={item.id}
-              className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center justify-between"
+              className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center justify-between gap-2"
             >
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <p className="font-semibold text-gray-900 dark:text-slate-100">{item.stock.ticker}</p>
-                  {item.latest_evaluation?.price_at_evaluation !== undefined &&
-                    item.latest_evaluation?.price_at_evaluation !== null && (
-                      <span className="text-sm text-gray-700 dark:text-slate-300">
-                        {item.latest_evaluation.price_at_evaluation} {item.stock.currency ?? ''}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-col shrink-0 -my-1">
+                  <button
+                    onClick={() => moveItem(index, -1)}
+                    disabled={index === 0}
+                    aria-label="Mover para cima"
+                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    onClick={() => moveItem(index, 1)}
+                    disabled={index === items.length - 1}
+                    aria-label="Mover para baixo"
+                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <Link to={`/stocks/${item.id}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-petrol-600 dark:hover:text-petrol-400">
+                      {item.stock.ticker}
+                    </Link>
+                    <span className="text-sm">
+                      <PriceChange price={item.last_price} changePct={item.price_change_pct} currency={item.stock.currency} />
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">{item.stock.name ?? '—'}</p>
+                  <div className="flex gap-2 mt-2">
+                    {item.latest_evaluation ? (
+                      <RecommendationBadge recommendation={item.latest_evaluation.recommendation} />
+                    ) : (
+                      <span className="text-xs text-gray-400 dark:text-slate-500">
+                        Sem avaliação ainda — vai a Avaliações e clica em "Avaliar agora"
                       </span>
                     )}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{item.stock.name ?? '—'}</p>
-                <div className="flex gap-2 mt-2">
-                  {item.latest_evaluation ? (
-                    <>
-                      <ScoreBadge kind="buy" score={item.latest_evaluation.buy_score} />
-                      <ScoreBadge kind="sell" score={item.latest_evaluation.sell_score} />
-                    </>
-                  ) : (
-                    <span className="text-xs text-gray-400 dark:text-slate-500">
-                      Sem avaliação ainda — vai a Feed e clica em "Avaliar agora"
-                    </span>
-                  )}
+                  </div>
                 </div>
               </div>
               <button
