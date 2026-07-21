@@ -1,0 +1,22 @@
+# Caddyfile — routing dos dois domínios em produção (Fase 7, ver ROADMAP.md).
+# Caddy trata HTTPS automático (Let's Encrypt) para ambos, mesmo atrás do proxy
+# da Cloudflare (o desafio de validação é reencaminhado até aqui). Ver CLAUDE.md
+# secção Segurança: em produção a API não é exposta diretamente, só via este proxy.
+
+appbenjamin.com, www.appbenjamin.com {
+    root * /srv/landing
+    file_server
+}
+
+beta.appbenjamin.com {
+    # Tudo o que começa por /api/v1 vai para o backend FastAPI.
+    handle /api/v1/* {
+        reverse_proxy api:8000
+    }
+
+    # O resto (a SPA React) vai para o container nginx com os ficheiros
+    # estáticos gerados pelo `vite build`.
+    handle {
+        reverse_proxy frontend:80
+    }
+}

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Benjamin — Think before you invest.</title>
+<meta name="description" content="Benjamin é um assistente de investimento pessoal: watchlist, estratégias configuráveis e um agente de IA que avalia as tuas posições com disciplina." />
+<link rel="icon" type="image/png" href="favicon-32.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        colors: {
+          navy: {
+            50: '#eef1f8', 100: '#d9e0ee', 200: '#b3c1dd', 300: '#8da2cc',
+            400: '#5a76a8', 500: '#2f4a7c', 600: '#233a63', 700: '#1a2c4c',
+            800: '#131f37', 900: '#0f172a',
+          },
+        },
+      },
+    },
+  };
+</script>
+<style>
+  body { background: #FAFAF8; }
+  .glow { background: radial-gradient(600px circle at 50% 0%, rgba(15,23,42,0.06), transparent 70%); }
+</style>
+</head>
+<body class="font-sans text-navy-900 antialiased">
+
+  <!-- Nav -->
+  <header class="max-w-5xl mx-auto px-6 py-6 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <img src="icon-192.png" alt="Benjamin" class="w-8 h-8 rounded-full" />
+      <span class="font-bold text-lg">Benjamin</span>
+    </div>
+    <a href="https://beta.appbenjamin.com" class="text-sm font-semibold bg-navy-900 text-white px-4 py-2 rounded-lg hover:bg-navy-700 transition-colors">
+      Entrar na beta
+    </a>
+  </header>
+
+  <!-- Hero -->
+  <section class="glow">
+    <div class="max-w-3xl mx-auto px-6 pt-16 pb-20 text-center">
+      <img src="icon-512.png" alt="Benjamin" class="w-20 h-20 rounded-full mx-auto mb-8 shadow-sm" />
+      <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+        Think before you invest.
+      </h1>
+      <p class="mt-5 text-lg text-navy-500 leading-relaxed">
+        Benjamin é o teu analista pessoal de investimento: mantém a tua watchlist,
+        corre estratégias configuráveis e explica, com disciplina, porque é que uma
+        ação é BUY, HOLD ou SELL — sem ruído, sem hype.
+      </p>
+      <div class="mt-8 flex items-center justify-center gap-4">
+        <a href="https://beta.appbenjamin.com" class="bg-navy-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-navy-700 transition-colors">
+          Experimentar a beta
+        </a>
+        <a href="#como-funciona" class="text-navy-700 font-semibold px-6 py-3 hover:text-navy-900">
+          Como funciona →
+        </a>
+      </div>
+      <p class="mt-4 text-xs text-navy-400">
+        Em beta privada. Não é aconselhamento financeiro.
+      </p>
+    </div>
+  </section>
+
+  <!-- Como funciona -->
+  <section id="como-funciona" class="max-w-5xl mx-auto px-6 py-20">
+    <div class="grid sm:grid-cols-3 gap-8">
+      <div class="bg-white rounded-2xl border border-navy-100 p-6">
+        <div class="w-10 h-10 rounded-lg bg-navy-50 flex items-center justify-center mb-4 text-navy-700 font-bold">1</div>
+        <h3 class="font-semibold text-lg mb-2">Watchlist</h3>
+        <p class="text-navy-500 text-sm leading-relaxed">
+          Adiciona as ações que segues, com dados fundamentais e técnicos sempre atualizados.
+        </p>
+      </div>
+      <div class="bg-white rounded-2xl border border-navy-100 p-6">
+        <div class="w-10 h-10 rounded-lg bg-navy-50 flex items-center justify-center mb-4 text-navy-700 font-bold">2</div>
+        <h3 class="font-semibold text-lg mb-2">Estratégias</h3>
+        <p class="text-navy-500 text-sm leading-relaxed">
+          Define os critérios que importam para ti — o Benjamin avalia cada posição de
+          forma consistente, critério a critério.
+        </p>
+      </div>
+      <div class="bg-white rounded-2xl border border-navy-100 p-6">
+        <div class="w-10 h-10 rounded-lg bg-navy-50 flex items-center justify-center mb-4 text-navy-700 font-bold">3</div>
+        <h3 class="font-semibold text-lg mb-2">Agente Benjamin</h3>
+        <p class="text-navy-500 text-sm leading-relaxed">
+          Pergunta diretamente ao Benjamin sobre qualquer posição ou sinal — respostas
+          com contexto, não genéricas.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Valores -->
+  <section class="border-t border-navy-100">
+    <div class="max-w-5xl mx-auto px-6 py-16">
+      <h2 class="text-sm font-semibold text-navy-400 uppercase tracking-wider mb-8 text-center">
+        Wisdom · Discipline · Transparency · Simplicity
+      </h2>
+      <p class="max-w-2xl mx-auto text-center text-navy-500 leading-relaxed">
+        O nome é um tributo a Benjamin Graham, o pai do "investimento em valor" —
+        a ideia de que decisões boas vêm de análise disciplinada, não de impulso.
+        É essa a filosofia por trás de cada avaliação que a app gera.
+      </p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-navy-100">
+    <div class="max-w-5xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-navy-400">
+      <div class="flex items-center gap-2">
+        <img src="icon-192.png" alt="" class="w-5 h-5 rounded-full" />
+        <span>© 2026 Benjamin</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="https://beta.appbenjamin.com" class="hover:text-navy-700">Beta</a>
+        <a href="mailto:edgarricardo7@gmail.com" class="hover:text-navy-700">Contacto</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
