@@ -1,9 +1,10 @@
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from tests.conftest import login
 
 from app.config import settings
-from app.models import Position, WatchlistItem
+from app.models import Position, StrategyItem, StrategyTemplate, WatchlistItem
 
 
 def _mock_openai_response(text: str):
@@ -159,6 +160,96 @@ async def test_refresh_context_includes_portfolio_exposure(client, db_session, u
     assert "Portfólio do utilizador" in context
     assert "AAPL" in context
     assert "já possui" in context
+
+
+async def test_refresh_context_includes_fundamentals(client, db_session, user_a, seeded_stock, monkeypatch):
+    """seeded_stock grava P/E=12.0 e dividend_yield=0.005 (0.5%) - devem
+    aparecer no contexto enviado ao LLM (antes só ia preço/variação/sinal)."""
+    monkeypatch.setattr(settings, "openai_api_key", "fake-key")
+    db_session.add(WatchlistItem(user_id=user_a.id, stock_id=seeded_stock.id))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_pulse():
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=_mock_openai_response("ok"))
+        with patch("app.services.analyst.AsyncOpenAI", return_value=mock_client):
+            resp = await client.post("/analyst/summary/refresh", headers=headers)
+    assert resp.status_code == 200
+
+    context = mock_client.chat.completions.create.call_args.kwargs["messages"][1]["content"]
+    assert "P/E 12.0" in context
+    assert "dividendo 0.5%" in context
+
+
+async def test_ask_requires_auth(client):
+    resp = await client.post("/analyst/ask", json={"question": "Alguma coisa?"})
+    assert resp.status_code == 401
+
+
+async def test_ask_without_api_key_returns_503(client, user_a, monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "")
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.post("/analyst/ask", json={"question": "Alguma coisa?"}, headers=headers)
+    assert resp.status_code == 503
+
+
+async def test_ask_question_too_long_rejected(client, user_a, monkeypatch):
+    monkeypatch.setattr(settings, "openai_api_key", "fake-key")
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.post("/analyst/ask", json={"question": "x" * 1001}, headers=headers)
+    assert resp.status_code == 422
+
+
+async def test_ask_uses_context_criteria_and_history(client, db_session, user_a, seeded_stock, monkeypatch):
+    """O contexto enviado ao LLM deve incluir o detalhe critério-a-critério da
+    avaliação (não só o sinal final, ao contrário do resumo), o histórico da
+    conversa é reenviado tal como veio, e a pergunta nova é a última mensagem."""
+    monkeypatch.setattr(settings, "openai_api_key", "fake-key")
+    template = StrategyTemplate(user_id=user_a.id, name="Value simples")
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(StrategyItem(
+        template_id=template.id, name="RSI sobrevendido", metric="RSI_14",
+        operator="<", threshold_value=Decimal("30"), weight=Decimal("2"), direction="buy_signal",
+    ))
+    db_session.add(WatchlistItem(user_id=user_a.id, stock_id=seeded_stock.id))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    run_resp = await client.post(
+        "/evaluations/run", json={"template_id": str(template.id)}, headers=headers
+    )
+    assert run_resp.status_code == 200
+
+    with mock_market_pulse():
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(
+            return_value=_mock_openai_response("Não tens sinal de compra porque o RSI não está sobrevendido.")
+        )
+        with patch("app.services.analyst.AsyncOpenAI", return_value=mock_client):
+            resp = await client.post(
+                "/analyst/ask",
+                json={
+                    "question": "Porque não tenho sinal de compra na AAPL?",
+                    "history": [
+                        {"role": "user", "content": "Olá"},
+                        {"role": "assistant", "content": "Olá, em que posso ajudar?"},
+                    ],
+                },
+                headers=headers,
+            )
+    assert resp.status_code == 200
+    assert "RSI" in resp.json()["answer"]
+
+    messages = mock_client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert "critério-a-critério" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert "RSI sobrevendido" in messages[1]["content"]  # detalhe critério-a-critério
+    assert messages[2] == {"role": "user", "content": "Olá"}
+    assert messages[3] == {"role": "assistant", "content": "Olá, em que posso ajudar?"}
+    assert messages[-1] == {"role": "user", "content": "Porque não tenho sinal de compra na AAPL?"}
 
 
 async def test_summary_isolated_between_users(client, db_session, user_a, user_b, seeded_stock, monkeypatch):

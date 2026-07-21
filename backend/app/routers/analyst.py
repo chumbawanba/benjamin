@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
-from app.schemas.common import AnalystPromptIn, AnalystPromptOut, AnalystSummaryOut
+from app.schemas.common import (
+    AnalystAskIn, AnalystAskOut, AnalystPromptIn, AnalystPromptOut, AnalystSummaryOut,
+)
 from app.security import get_current_user
 from app.services import analyst
 
@@ -32,6 +34,25 @@ async def get_summary(user: User = Depends(get_current_user)):
     return AnalystSummaryOut(
         summary=user.analyst_summary, generated_at=_as_utc(user.analyst_summary_generated_at),
     )
+
+
+@router.post("/ask", response_model=AnalystAskOut)
+async def ask(
+    body: AnalystAskIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Pergunta ao Benjamin com o contexto completo (portfólio + watchlist +
+    detalhe critério-a-critério das avaliações + mercado). Sem persistência —
+    o histórico da conversa vem do frontend a cada pedido."""
+    try:
+        answer = await analyst.generate_answer(db, user, body.question, body.history)
+    except analyst.AnalystNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except Exception as e:
+        logger.warning("Falha ao responder pergunta do analista para %s", user.id, exc_info=True)
+        raise HTTPException(
+            status_code=502, detail="Não foi possível obter resposta (serviço de IA indisponível).",
+        ) from e
+    return AnalystAskOut(answer=answer)
 
 
 @router.get("/prompt", response_model=AnalystPromptOut)

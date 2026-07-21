@@ -16,7 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.models import Evaluation, Position, User, WatchlistItem
+from app.models import (
+    Evaluation, FundamentalsSnapshot, Position, StrategyItem, StrategyTemplate, User, WatchlistItem,
+)
+from app.schemas.common import AnalystChatMessageIn
 from app.services import market_data
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,23 @@ DEFAULT_SYSTEM_PROMPT = (
 
 MAX_PROMPT_LENGTH = 4000  # ~1000 tokens - suficiente para instruções, evita custos descontrolados
 
+ASK_SYSTEM_PROMPT = (
+    "Chamas-te Benjamin e és o analista financeiro pessoal do utilizador, agora "
+    "numa conversa de perguntas e respostas. Recebes o mesmo contexto do resumo "
+    "(portfólio, watchlist, mercado geral) mais o detalhe critério-a-critério de "
+    "cada avaliação (nome do critério, métrica, threshold, valor observado, se "
+    "passou ou falhou, contribuição para o score). Respondes de forma direta e "
+    "curta (poucas frases, sem bullet points nem markdown) à pergunta do "
+    "utilizador - por exemplo, para explicar porque uma ação tem ou não sinal de "
+    "compra/venda, aponta os critérios concretos que passaram ou falharam. Se a "
+    "pergunta não tiver relação com os dados fornecidos, di-lo em vez de "
+    "inventar. Não dás conselhos de investimento diretos - descreves o que os "
+    "dados mostram, deixando a decisão para o utilizador."
+)
+
+MAX_QUESTION_LENGTH = 1000  # espelha AnalystAskIn.question em schemas/common.py
+MAX_HISTORY_MESSAGES = 20  # espelha AnalystAskIn.history em schemas/common.py - defesa extra no serviço
+
 
 class AnalystNotConfigured(Exception):
     """OPENAI_API_KEY não está definida - feature indisponível, não é erro."""
@@ -54,6 +74,36 @@ def effective_prompt(user: User) -> str:
     if user.analyst_prompt and user.analyst_prompt.strip():
         return user.analyst_prompt
     return DEFAULT_SYSTEM_PROMPT
+
+
+def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:
+    """Linha compacta com os 5 fundamentais (só os que existem) - mesmos campos
+    já usados nas estratégias (PE_RATIO, DIVIDEND_YIELD, EPS, DEBT_TO_EQUITY,
+    MARKET_CAP), formatados como no registry de indicadores (indicators_core.py):
+    dividend_yield é fração (0.02 = 2%), market_cap em USD (mostrado em B$)."""
+    if row is None:
+        return "sem fundamentais"
+    parts = []
+    if row.pe_ratio is not None:
+        parts.append(f"P/E {row.pe_ratio}")
+    if row.dividend_yield is not None:
+        parts.append(f"dividendo {float(row.dividend_yield) * 100:.1f}%")
+    if row.eps is not None:
+        parts.append(f"EPS {row.eps}")
+    if row.debt_to_equity is not None:
+        parts.append(f"dívida/capital {row.debt_to_equity}")
+    if row.market_cap is not None:
+        parts.append(f"cap. mercado {row.market_cap / 1_000_000_000:.1f}B$")
+    return ", ".join(parts) if parts else "sem fundamentais"
+
+
+async def _latest_fundamentals(db: AsyncSession, stock_id) -> FundamentalsSnapshot | None:
+    return (
+        await db.execute(
+            select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock_id)
+            .order_by(FundamentalsSnapshot.date.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 async def _build_context(db: AsyncSession, user: User) -> str:
@@ -84,9 +134,11 @@ async def _build_context(db: AsyncSession, user: User) -> str:
         price_str = f"{last_price}" if last_price is not None else "sem preço"
         pl_str = f"P&L {pl_pct:+.1f}%" if pl_pct is not None else "P&L desconhecido"
         weight_str = f", {weight_pct:.0f}% do portfólio" if weight_pct is not None else ""
+        fundamentals_str = _format_fundamentals(await _latest_fundamentals(db, p.stock_id))
         lines.append(
             f"- {p.stock.ticker} ({p.stock.name or 'nome desconhecido'}): "
-            f"{p.quantity} unidades a custo médio {p.avg_cost}, preço atual {price_str}, {pl_str}{weight_str}"
+            f"{p.quantity} unidades a custo médio {p.avg_cost}, preço atual {price_str}, {pl_str}{weight_str} "
+            f"[{fundamentals_str}]"
         )
     if total_market_value:
         lines.append(f"Valor total de mercado do portfólio: {total_market_value:.2f}")
@@ -120,9 +172,11 @@ async def _build_context(db: AsyncSession, user: User) -> str:
         price_str = f"{last_price}" if last_price is not None else "sem preço"
         change_str = f"{float(change_pct):+.2f}%" if change_pct is not None else "sem variação"
         ownership = "já possui" if item.stock_id in owned_stock_ids else "não possui"
+        fundamentals_str = _format_fundamentals(await _latest_fundamentals(db, item.stock_id))
         lines.append(
             f"- {item.stock.ticker} ({item.stock.name or 'nome desconhecido'}): "
-            f"preço {price_str}, variação hoje {change_str}, sinal: {signal} ({ownership})"
+            f"preço {price_str}, variação hoje {change_str}, sinal: {signal} ({ownership}) "
+            f"[{fundamentals_str}]"
         )
 
     pulse = await market_data.get_market_pulse()
@@ -138,6 +192,103 @@ async def _build_context(db: AsyncSession, user: User) -> str:
         lines.append(f"- {n['headline']} — {n['source'] or 'fonte desconhecida'}")
 
     return "\n".join(lines)
+
+
+async def _build_criteria_context(db: AsyncSession, user: User) -> str:
+    """Detalhe critério-a-critério da avaliação mais recente de cada ação da
+    watchlist, por estratégia ativa - permite ao Benjamin explicar o 'porquê'
+    de um sinal quando questionado (ex: 'porque não tenho compra na
+    Microsoft?'), o que o resumo normal não inclui (só o sinal final). Reusa a
+    mesma informação de GET /watchlist/{id}/detail, mas para toda a watchlist
+    de uma vez, não só uma ação."""
+    items = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.user_id == user.id)
+            .order_by(WatchlistItem.display_order.asc())
+        )
+    ).scalars().all()
+    if not items:
+        return ""
+
+    lines = ["\n## Detalhe critério-a-critério das avaliações mais recentes"]
+    any_detail = False
+    for item in items:
+        evaluations = (
+            await db.execute(
+                select(Evaluation).options(selectinload(Evaluation.details))
+                .where(Evaluation.user_id == user.id, Evaluation.stock_id == item.stock_id)
+                .order_by(Evaluation.run_at.desc())
+            )
+        ).scalars().all()
+        # última avaliação por estratégia - pode haver mais que uma estratégia ativa
+        latest_by_template: dict = {}
+        for ev in evaluations:
+            latest_by_template.setdefault(ev.strategy_template_id, ev)
+
+        for template_id, ev in latest_by_template.items():
+            template = (
+                await db.execute(select(StrategyTemplate).where(StrategyTemplate.id == template_id))
+            ).scalar_one_or_none()
+            if template is None or not template.is_active:
+                continue
+            item_ids = [d.strategy_item_id for d in ev.details]
+            strategy_items = (
+                await db.execute(select(StrategyItem).where(StrategyItem.id.in_(item_ids)))
+            ).scalars().all()
+            items_by_id = {si.id: si for si in strategy_items}
+            if not items_by_id:
+                continue
+            any_detail = True
+            lines.append(
+                f"\n### {item.stock.ticker} - {template.name} "
+                f"({ev.recommendation}, compra={ev.buy_score}, venda={ev.sell_score})"
+            )
+            for d in ev.details:
+                si = items_by_id.get(d.strategy_item_id)
+                if si is None:
+                    continue
+                status = "passou" if d.passed else ("falhou" if d.passed is False else "sem dados")
+                threshold = f"{si.operator} {si.threshold_value}"
+                if si.threshold_value_max is not None:
+                    threshold += f" a {si.threshold_value_max}"
+                lines.append(
+                    f"- {si.name} ({si.metric} {threshold}): observado {d.observed_value}, "
+                    f"{status}, contribuição {d.contribution}"
+                )
+
+    return "\n".join(lines) if any_detail else ""
+
+
+async def generate_answer(
+    db: AsyncSession, user: User, question: str, history: list[AnalystChatMessageIn],
+) -> str:
+    """Responde a uma pergunta do utilizador com o mesmo contexto do resumo
+    (portfólio + watchlist + mercado) mais o detalhe critério-a-critério das
+    avaliações, e o histórico da conversa até agora (vindo do frontend, sem
+    persistência em BD). Lança AnalystNotConfigured se não houver chave, ou
+    deixa propagar erros da OpenAI (o router traduz para um 502)."""
+    if not settings.openai_api_key:
+        raise AnalystNotConfigured("OPENAI_API_KEY não configurada")
+
+    context = await _build_context(db, user) + await _build_criteria_context(db, user)
+
+    messages = [
+        {"role": "system", "content": ASK_SYSTEM_PROMPT},
+        {"role": "user", "content": context},
+    ]
+    for msg in history[-MAX_HISTORY_MESSAGES:]:
+        messages.append({"role": msg.role, "content": msg.content})
+    messages.append({"role": "user", "content": question})
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    response = await client.chat.completions.create(
+        model=settings.openai_model, messages=messages, max_tokens=500,
+    )
+    text = response.choices[0].message.content if response.choices else None
+    if not text or not text.strip():
+        raise RuntimeError("Resposta vazia da OpenAI")
+    return text.strip()
 
 
 async def generate_summary(db: AsyncSession, user: User) -> str:

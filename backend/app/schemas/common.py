@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -151,6 +152,23 @@ class AnalystPromptOut(BaseModel):
 
 class AnalystPromptIn(BaseModel):
     prompt: str | None = None  # None ou "" repõe a predefinição
+
+
+# ---- Analyst: perguntas com contexto ("Perguntar ao Benjamin") ----
+class AnalystChatMessageIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class AnalystAskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    # histórico da conversa até agora, mantido no frontend (sem tabela na BD) -
+    # limitado para controlar custo/latência do pedido à OpenAI.
+    history: list[AnalystChatMessageIn] = Field(default_factory=list, max_length=20)
+
+
+class AnalystAskOut(BaseModel):
+    answer: str
 
 
 # ---- Portfolio (posições reais, distinto da watchlist) ----
