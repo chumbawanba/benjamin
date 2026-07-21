@@ -51,6 +51,36 @@ Limitação conhecida: soma de custo/valor do portfolio assume uma única moeda 
 conversão FX) — razoável para o MVP mas fica errado se o utilizador tiver posições em
 moedas diferentes.
 
+## Perguntas ao Benjamin com contexto + fundamentais no input (2026-07-21)
+Os dois itens que tinham ficado "em curso" no ROADMAP.md (secção 3) estão feitos:
+
+- **Fundamentais no contexto**: `analyst._build_context` passou a incluir uma linha
+  compacta com P/E, dividend yield, EPS, dívida/capital e market cap (`_format_fundamentals`,
+  lê o `FundamentalsSnapshot` mais recente) em cada posição e cada item da watchlist — antes só
+  ia preço/variação/sinal.
+- **`POST /analyst/ask`** (`AnalystAskIn`/`AnalystAskOut` em `schemas/common.py`): pergunta com
+  contexto completo — reusa `_build_context` e acrescenta `_build_criteria_context`, que lista o
+  critério-a-critério (nome, métrica, threshold, valor observado, passou/falhou, contribuição) da
+  avaliação mais recente de cada ação da watchlist por estratégia ativa (a mesma info da
+  StockDetail, mas agora disponível ao Benjamin para explicar o "porquê" de um sinal). Prompt de
+  sistema dedicado (`ASK_SYSTEM_PROMPT`, distinto do do resumo). Histórico da conversa vem do
+  frontend a cada pedido (sem tabela nova na BD), limitado a 20 mensagens
+  (`AnalystAskIn.history`, `max_length=20` — o serviço também corta defensivamente do lado do
+  servidor). Pergunta limitada a 1000 caracteres.
+- Frontend: secção "Perguntar" no `AnalystSummaryCard` (toggle ao lado de "Editar prompt"),
+  chat simples com histórico em `useState` (`AnalystChatMessage[]`), envia só as últimas 20
+  mensagens (`MAX_HISTORY_SENT`, espelha o limite do backend), Enter envia / Shift+Enter quebra
+  linha, botão "Limpar conversa".
+- Testes: `test_refresh_context_includes_fundamentals`, `test_ask_requires_auth`,
+  `test_ask_without_api_key_returns_503`, `test_ask_question_too_long_rejected`,
+  `test_ask_uses_context_criteria_and_history` (verifica que o contexto, o histórico reenviado e
+  a pergunta nova chegam à OpenAI na ordem certa). `pytest`: 96 passed (Python 3.12 não estava
+  disponível no ambiente onde isto correu — testado com 3.10 via venv separada; nenhum código do
+  projeto foi alterado por causa disso, só a forma de correr os testes nesta sessão). Frontend:
+  `tsc --noEmit` sem erros; `vite build` não correu por falta do binário nativo do rollup para
+  Linux no `node_modules` existente (instalado noutra plataforma) — build manual recomendado
+  antes de dar por validado no browser.
+
 ## UX review + Fase 8 — quick wins (2026-07-18)
 Comparação com apps semelhantes identificou 4 lacunas de alto impacto e baixo esforço,
 já implementadas:
@@ -162,13 +192,25 @@ stack:
 
 ## Decisões já tomadas (não reabrir sem razão)
 - Nome: Benjamin (com n)
+- Domínio: appbenjamin.com (decidido 2026-07-21)
+- Logo: mocotto/coruja minimalista (navy sobre branco), com wordmark "Benjamin" — partilhado
+  em chat a 2026-07-21, ainda não guardado no repositório (ver nota abaixo)
 - Stack fechada no SPEC.md secção 2 (Finnhub + Twelve Data, PWA, APScheduler, SMTP, JWT simples)
-- Fora do MVP: SPEC.md secção 13 (RLS, refresh tokens, news, portfólio, Celery...)
+- Fora do MVP: SPEC.md secção 13 (RLS, refresh tokens, news, Celery...) — **nota:**
+  "portfólio" estava nesta lista originalmente mas foi construído em 2026-07-19
+  (ver secção acima); a lista do SPEC.md ficou desatualizada nesse ponto, o
+  código é que manda. Ver ROADMAP.md para o histórico completo e o que falta.
 - Deploy alvo: Hetzner CX22 + Caddy + ufw (detalhado na conversa de arquitetura)
 
 ## Próximos passos por ordem
-1. ~~Correr `pytest` localmente~~ — FEITO, 33 passed (a subir para ~39 com os testes novos do Finnhub)
+1. ~~Correr `pytest` localmente~~ — FEITO, 96 passed
 2. ~~Correr `npm install && npm run dev` e validar o fluxo manual~~ — FEITO
-3. Confirmar os campos de `/stock/metric` da Finnhub (P/E, dividend yield) com um payload real
-4. Fase 7 restante: docker-compose.prod.yml + Caddy + guia de deploy
-5. Gerar e commitar a migration inicial do Alembic
+3. ~~Confirmar os campos de `/stock/metric` da Finnhub~~ — FEITO
+4. ~~Perguntas ao Benjamin com contexto + fundamentais no input~~ — FEITO (2026-07-21, ver secção acima)
+5. ~~Validar manualmente no browser o chat "Perguntar"~~ — FEITO (2026-07-21, testado ao vivo via
+   Claude in Chrome: pergunta sobre critérios + pergunta de seguimento, ambas corretas)
+6. Guardar o ficheiro real do logo no repo (`frontend/public/`) e ligar como ícone PWA/favicon
+   (hoje é só `icon.svg` genérico) — falta o ficheiro em si, só foi partilhado em chat
+7. Fase 7 restante: docker-compose.prod.yml + Caddy + guia de deploy (agora com domínio real
+   appbenjamin.com para o Caddyfile/DNS)
+8. Consulta jurídica (MiFID II/CMVM) antes de qualquer beta com desconhecidos
