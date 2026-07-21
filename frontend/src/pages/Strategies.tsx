@@ -17,7 +17,7 @@ function horizonLabel(h: Horizon | null): string | null {
   return null;
 }
 
-export default function Strategies() {
+export default function Strategies({ embedded = false }: { embedded?: boolean }) {
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
   const [name, setName] = useState('');
   const [horizon, setHorizon] = useState<Horizon | ''>('');
@@ -135,7 +135,7 @@ export default function Strategies() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Estratégias</h1>
+      {!embedded && <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Estratégias</h1>}
 
       <form onSubmit={handleCreate} className="flex flex-wrap gap-2 mb-4">
         <input
@@ -155,7 +155,7 @@ export default function Strategies() {
             </option>
           ))}
         </select>
-        <button type="submit" className="bg-petrol-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">
+        <button type="submit" className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold">
           Criar
         </button>
       </form>
@@ -177,7 +177,7 @@ export default function Strategies() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {horizonLabel(t.horizon) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-petrol-50 text-petrol-700 dark:bg-petrol-500/15 dark:text-petrol-400">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
                       {horizonLabel(t.horizon)}
                     </span>
                   )}
@@ -193,7 +193,7 @@ export default function Strategies() {
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-3 text-sm font-medium">
-                <Link to={`/strategies/${t.id}`} className="text-petrol-600 dark:text-petrol-400">
+                <Link to={`/strategies/${t.id}`} className="text-navy-600 dark:text-navy-400">
                   Editar
                 </Link>
                 <button onClick={() => toggleActive(t)} className="text-gray-600 dark:text-slate-400">
@@ -205,7 +205,7 @@ export default function Strategies() {
                 <button
                   onClick={() => optimizeStrategy(t)}
                   disabled={optimizing[t.id]}
-                  className="text-petrol-600 dark:text-petrol-400 disabled:opacity-50"
+                  className="text-navy-600 dark:text-navy-400 disabled:opacity-50"
                 >
                   {optimizing[t.id] ? 'A otimizar…' : 'Otimizar'}
                 </button>
@@ -275,7 +275,7 @@ export default function Strategies() {
                     <button
                       onClick={() => applyProposal(t)}
                       disabled={applying[t.id] || proposals[t.id].items.length === 0}
-                      className="text-petrol-600 dark:text-petrol-400 disabled:opacity-50"
+                      className="text-navy-600 dark:text-navy-400 disabled:opacity-50"
                     >
                       {applying[t.id] ? 'A aplicar…' : 'Aplicar (substitui critérios atuais)'}
                     </button>

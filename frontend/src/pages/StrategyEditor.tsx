@@ -122,7 +122,7 @@ export default function StrategyEditor() {
     return (
       <p className="text-sm text-red-600 dark:text-rose-400">
         Estratégia não encontrada.{' '}
-        <Link to="/strategies" className="text-petrol-600 dark:text-petrol-400">
+        <Link to="/workspace?tab=estrategias" className="text-navy-600 dark:text-navy-400">
           Voltar
         </Link>
       </p>
@@ -131,7 +131,7 @@ export default function StrategyEditor() {
 
   return (
     <div>
-      <Link to="/strategies" className="text-sm text-petrol-600 dark:text-petrol-400">
+      <Link to="/workspace?tab=estrategias" className="text-sm text-navy-600 dark:text-navy-400">
         &larr; Estratégias
       </Link>
       <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mt-2 mb-4">{template.name}</h1>
@@ -150,7 +150,7 @@ export default function StrategyEditor() {
                 </p>
               </div>
               <div className="flex gap-2 text-sm font-medium shrink-0">
-                <button onClick={() => startEdit(item)} className="text-petrol-600 dark:text-petrol-400">
+                <button onClick={() => startEdit(item)} className="text-navy-600 dark:text-navy-400">
                   Editar
                 </button>
                 <button onClick={() => handleDeleteItem(item.id)} className="text-red-500 dark:text-rose-400">
@@ -275,7 +275,7 @@ export default function StrategyEditor() {
             step={1}
             value={form.weight}
             onChange={(e) => setForm({ ...form, weight: Number(e.target.value) })}
-            className="w-full accent-petrol-600 dark:accent-petrol-500"
+            className="w-full accent-navy-600 dark:accent-navy-500"
           />
           <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
             Peso relativo face aos outros critérios (0 = ignora este critério no score).
@@ -294,7 +294,7 @@ export default function StrategyEditor() {
         {error && <p className="text-sm text-red-600 dark:text-rose-400">{error}</p>}
 
         <div className="flex gap-2">
-          <button type="submit" className="flex-1 bg-petrol-600 text-white rounded-lg py-2 text-sm font-semibold">
+          <button type="submit" className="flex-1 bg-navy-600 text-white rounded-lg py-2 text-sm font-semibold">
             {editingId ? 'Guardar' : 'Adicionar'}
           </button>
           {editingId && (

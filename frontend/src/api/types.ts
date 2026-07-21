@@ -170,6 +170,18 @@ export interface AnalystPrompt {
   is_default: boolean;
 }
 
+// "Perguntar ao Benjamin" (POST /analyst/ask) - histórico mantido só no
+// frontend (sem tabela na BD), reenviado a cada pergunta - ver AnalystAskIn
+// em app/schemas/common.py (máximo 20 mensagens, aplicado em client.ts).
+export interface AnalystChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AnalystAskResponse {
+  answer: string;
+}
+
 export interface StrategySignalGroup {
   strategy_id: string;
   strategy_name: string;

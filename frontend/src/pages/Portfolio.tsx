@@ -179,7 +179,7 @@ export default function Portfolio() {
           <button
             type="submit"
             disabled={adding}
-            className="bg-petrol-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
+            className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
           >
             {adding ? '…' : 'Adicionar'}
           </button>
@@ -249,7 +249,7 @@ export default function Portfolio() {
                     <button
                       onClick={() => saveEdit(p.id)}
                       disabled={editSaving}
-                      className="text-petrol-600 dark:text-petrol-400 text-xs font-medium disabled:opacity-50"
+                      className="text-navy-600 dark:text-navy-400 text-xs font-medium disabled:opacity-50"
                     >
                       {editSaving ? 'A guardar…' : 'Guardar'}
                     </button>

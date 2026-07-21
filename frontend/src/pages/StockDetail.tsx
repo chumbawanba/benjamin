@@ -65,7 +65,7 @@ export default function StockDetail() {
     return (
       <p className="text-sm text-red-600 dark:text-rose-400">
         {error ?? 'Não encontrado.'}{' '}
-        <Link to="/watchlist" className="text-petrol-600 dark:text-petrol-400">
+        <Link to="/workspace" className="text-navy-600 dark:text-navy-400">
           Voltar à watchlist
         </Link>
       </p>
@@ -78,7 +78,7 @@ export default function StockDetail() {
 
   return (
     <div>
-      <Link to="/watchlist" className="text-sm text-petrol-600 dark:text-petrol-400">
+      <Link to="/workspace" className="text-sm text-navy-600 dark:text-navy-400">
         &larr; Watchlist
       </Link>
 
@@ -184,7 +184,7 @@ export default function StockDetail() {
       ) : (
         <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">
           Ainda sem avaliação.{' '}
-          <Link to="/feed" className="text-petrol-600 dark:text-petrol-400">
+          <Link to="/workspace?tab=avaliacoes" className="text-navy-600 dark:text-navy-400">
             Corre uma estratégia em Avaliações
           </Link>
           .

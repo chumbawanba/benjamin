@@ -3,7 +3,7 @@ import { ApiError, api } from '../api/client';
 import { Evaluation, StrategyTemplate, WatchlistItem } from '../api/types';
 import RecommendationBadge from '../components/RecommendationBadge';
 
-export default function Feed() {
+export default function Feed({ embedded = false }: { embedded?: boolean }) {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
@@ -80,7 +80,7 @@ export default function Feed() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Avaliações</h1>
+      {!embedded && <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Avaliações</h1>}
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 flex gap-2 items-center">
         <select
@@ -98,7 +98,7 @@ export default function Feed() {
         <button
           onClick={handleRunNow}
           disabled={!selectedTemplate || running}
-          className="bg-petrol-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
+          className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
         >
           {running ? 'A avaliar…' : 'Avaliar agora'}
         </button>
@@ -133,7 +133,7 @@ export default function Feed() {
                 <button
                   onClick={() => handleRunSingle(ev.stock_id)}
                   disabled={!selectedTemplate || runningStock === ev.stock_id}
-                  className="text-xs text-petrol-600 dark:text-petrol-400 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="text-xs text-navy-600 dark:text-navy-400 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {runningStock === ev.stock_id ? 'A avaliar…' : '↻ Avaliar só este'}
                 </button>

@@ -10,6 +10,8 @@ function formatDate(iso: string): string {
 // substitui os cartões de contagem Comprar/Vender/Manter no topo do Overview.
 // Atualização é sempre manual (botão), nunca automática — ver backend/app/services/analyst.py.
 // O prompt de sistema usado para gerar o resumo é editável (botão "Editar prompt").
+// Nota: o chat "Perguntar ao Benjamin" já não vive aqui — passou a ser global (painel
+// lateral no desktop, botão flutuante no mobile), ver Layout.tsx e AnalystChatContext.tsx.
 export default function AnalystSummaryCard() {
   const [data, setData] = useState<AnalystSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,7 @@ export default function AnalystSummaryCard() {
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
-            className="text-xs font-medium text-petrol-600 dark:text-petrol-400 disabled:opacity-50"
+            className="text-xs font-medium text-navy-600 dark:text-navy-400 disabled:opacity-50"
           >
             {refreshing ? 'A gerar…' : data?.summary ? 'Atualizar análise' : 'Gerar análise'}
           </button>
@@ -120,7 +122,7 @@ export default function AnalystSummaryCard() {
                 <button
                   onClick={() => savePrompt(promptDraft)}
                   disabled={promptSaving}
-                  className="text-petrol-600 dark:text-petrol-400 disabled:opacity-50"
+                  className="text-navy-600 dark:text-navy-400 disabled:opacity-50"
                 >
                   {promptSaving ? 'A guardar…' : 'Guardar'}
                 </button>

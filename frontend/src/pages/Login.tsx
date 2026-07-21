@@ -28,7 +28,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-950 px-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm">
-        <h1 className="text-2xl font-bold text-petrol-600 dark:text-petrol-400 mb-1">Benjamin</h1>
+        <h1 className="text-2xl font-bold text-navy-600 dark:text-navy-400 mb-1">Benjamin</h1>
         <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Inicia sessão para continuar</p>
 
         <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1" htmlFor="email">
@@ -62,7 +62,7 @@ export default function Login() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-petrol-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50"
+          className="w-full bg-navy-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50"
         >
           {loading ? 'A entrar…' : 'Entrar'}
         </button>

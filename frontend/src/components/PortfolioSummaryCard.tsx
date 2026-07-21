@@ -63,7 +63,7 @@ export default function PortfolioSummaryCard() {
     >
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Portfolio</h2>
-        <span className="text-xs text-petrol-600 dark:text-petrol-400">Ver detalhe →</span>
+        <span className="text-xs text-navy-600 dark:text-navy-400">Ver detalhe →</span>
       </div>
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>

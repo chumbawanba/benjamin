@@ -7,7 +7,7 @@ import RecommendationBadge from '../components/RecommendationBadge';
 
 const POPULAR_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B'];
 
-export default function Watchlist() {
+export default function Watchlist({ embedded = false }: { embedded?: boolean }) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +99,7 @@ export default function Watchlist() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Watchlist</h1>
+      {!embedded && <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Watchlist</h1>}
 
       <div className="mb-4">
         <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Sugestões rápidas</p>
@@ -130,7 +130,7 @@ export default function Watchlist() {
         <button
           type="submit"
           disabled={searching}
-          className="bg-petrol-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
+          className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
         >
           {searching ? '…' : 'Procurar'}
         </button>
@@ -158,7 +158,7 @@ export default function Watchlist() {
                   <button
                     onClick={() => handleAddTicker(r.ticker)}
                     disabled={already || addingTicker === r.ticker}
-                    className="text-petrol-600 dark:text-petrol-400 font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-navy-600 dark:text-navy-400 font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {already ? 'Já na lista' : 'Adicionar'}
                   </button>
@@ -189,7 +189,7 @@ export default function Watchlist() {
                     onClick={() => moveItem(index, -1)}
                     disabled={index === 0}
                     aria-label="Mover para cima"
-                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-navy-600 dark:hover:text-navy-400 leading-none text-xs px-1"
                   >
                     ▲
                   </button>
@@ -197,14 +197,14 @@ export default function Watchlist() {
                     onClick={() => moveItem(index, 1)}
                     disabled={index === items.length - 1}
                     aria-label="Mover para baixo"
-                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                    className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-navy-600 dark:hover:text-navy-400 leading-none text-xs px-1"
                   >
                     ▼
                   </button>
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <Link to={`/stocks/${item.id}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-petrol-600 dark:hover:text-petrol-400">
+                    <Link to={`/stocks/${item.id}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400">
                       {item.stock.ticker}
                     </Link>
                     <span className="text-sm">

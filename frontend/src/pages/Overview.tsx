@@ -97,7 +97,10 @@ export default function Overview() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Overview</h1>
+      <div className="flex items-center gap-2 mb-4">
+        <img src="/icon-192.png" alt="" className="w-9 h-9 rounded-full shrink-0" />
+        <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">Benjamin</h1>
+      </div>
 
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 
@@ -113,7 +116,7 @@ export default function Overview() {
               onClick={() => setTab('sinais')}
               className={`flex-1 text-center py-2 text-sm font-medium border-b-2 -mb-px ${
                 tab === 'sinais'
-                  ? 'text-petrol-600 dark:text-petrol-400 border-petrol-600 dark:border-petrol-400'
+                  ? 'text-navy-600 dark:text-navy-400 border-navy-600 dark:border-navy-400'
                   : 'text-gray-400 dark:text-slate-500 border-transparent'
               }`}
             >
@@ -123,7 +126,7 @@ export default function Overview() {
               onClick={() => setTab('noticias')}
               className={`flex-1 text-center py-2 text-sm font-medium border-b-2 -mb-px ${
                 tab === 'noticias'
-                  ? 'text-petrol-600 dark:text-petrol-400 border-petrol-600 dark:border-petrol-400'
+                  ? 'text-navy-600 dark:text-navy-400 border-navy-600 dark:border-navy-400'
                   : 'text-gray-400 dark:text-slate-500 border-transparent'
               }`}
             >
@@ -137,7 +140,7 @@ export default function Overview() {
               {watchlist.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   A watchlist está vazia.{' '}
-                  <Link to="/watchlist" className="text-petrol-600 dark:text-petrol-400">
+                  <Link to="/workspace" className="text-navy-600 dark:text-navy-400">
                     Adiciona ações
                   </Link>
                   .
@@ -145,7 +148,7 @@ export default function Overview() {
               ) : groups.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   Ainda não tens estratégias ativas.{' '}
-                  <Link to="/strategies" className="text-petrol-600 dark:text-petrol-400">
+                  <Link to="/workspace?tab=estrategias" className="text-navy-600 dark:text-navy-400">
                     Cria uma estratégia
                   </Link>
                   .
@@ -159,7 +162,7 @@ export default function Overview() {
                           {group.strategy_name}
                         </h2>
                         {horizonLabel(group.horizon) && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-petrol-50 text-petrol-700 dark:bg-petrol-500/15 dark:text-petrol-400">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
                             {horizonLabel(group.horizon)}
                           </span>
                         )}
@@ -187,7 +190,7 @@ export default function Overview() {
                                       onClick={() => moveSignal(group.signals, index, -1)}
                                       disabled={index === 0}
                                       aria-label="Mover para cima"
-                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-navy-600 dark:hover:text-navy-400 leading-none text-xs px-1"
                                     >
                                       ▲
                                     </button>
@@ -195,7 +198,7 @@ export default function Overview() {
                                       onClick={() => moveSignal(group.signals, index, 1)}
                                       disabled={index === group.signals.length - 1}
                                       aria-label="Mover para baixo"
-                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-petrol-600 dark:hover:text-petrol-400 leading-none text-xs px-1"
+                                      className="text-gray-300 dark:text-slate-600 disabled:opacity-30 hover:text-navy-600 dark:hover:text-navy-400 leading-none text-xs px-1"
                                     >
                                       ▼
                                     </button>
@@ -203,7 +206,7 @@ export default function Overview() {
                                   <div className="min-w-0">
                                     <Link
                                       to={wlItem ? `/stocks/${wlItem.id}` : '#'}
-                                      className="font-semibold text-gray-900 dark:text-slate-100 hover:text-petrol-600 dark:hover:text-petrol-400"
+                                      className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400"
                                     >
                                       {signal.stock.ticker}
                                     </Link>
@@ -241,7 +244,7 @@ export default function Overview() {
                   {news.map((item, idx) => (
                     <li key={idx} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4">
                       <a href={item.url ?? undefined} target="_blank" rel="noreferrer" className="block">
-                        <p className="text-xs text-petrol-600 dark:text-petrol-400 font-medium">{item.ticker}</p>
+                        <p className="text-xs text-navy-600 dark:text-navy-400 font-medium">{item.ticker}</p>
                         <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{item.headline}</p>
                         <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
                           {item.source}
