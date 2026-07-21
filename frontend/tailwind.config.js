@@ -5,18 +5,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Verde-petróleo — cor de destaque da app (tema escuro estilo trading).
-        petrol: {
-          50: '#e6f5f4',
-          100: '#ccebe8',
-          200: '#99d6d1',
-          300: '#66c2ba',
-          400: '#33ada3',
-          500: '#0f8f84',
-          600: '#0c726a',
-          700: '#0a5a54',
-          800: '#07423e',
-          900: '#052b28',
+        // Navy — cor de destaque da app, alinhada com o Primary (#0F172A) do
+        // BRAND.md (2026-07-21, substituiu o antigo "petrol" verde-petróleo).
+        // Saturação mais alta que o "slate" (já usado como neutro/fundo em toda
+        // a UI) para o accent continuar distinguível do chrome neutro.
+        navy: {
+          50: '#eef1f8',
+          100: '#dce3f1',
+          200: '#b9c7e3',
+          300: '#93a8d1',
+          400: '#6685bb',
+          500: '#46639e',
+          600: '#344e82',
+          700: '#283d68',
+          800: '#1c2c4d',
+          900: '#0f172a',
         },
       },
     },

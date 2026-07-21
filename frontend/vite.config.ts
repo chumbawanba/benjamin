@@ -12,11 +12,16 @@ export default defineConfig({
         name: 'Benjamin',
         short_name: 'Benjamin',
         description: 'Watchlist + estratégias + agente de avaliação de investimentos',
-        theme_color: '#07423e',
+        // Navy do BRAND.md (logo da coruja, 2026-07-21) - substituiu o antigo
+        // verde-petróleo (#07423e) do rebrand petrol -> navy.
+        theme_color: '#0F172A',
         background_color: '#020617',
         display: 'standalone',
         start_url: '/',
-        icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+        ],
       },
     }),
   ],
