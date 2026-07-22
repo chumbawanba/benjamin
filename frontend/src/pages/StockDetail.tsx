@@ -27,6 +27,17 @@ function formatIndicatorValue(key: string, value: number | null): string {
   return n.toFixed(2);
 }
 
+// Descrições curtas para tooltip (title), mesmo padrão já usado nos
+// indicadores técnicos (ver ind.description mais abaixo) — os fundamentais
+// não vêm do backend com descrição porque são campos fixos, não uma lista
+// configurável como os indicadores (ver INDICATORS em indicators_core.py).
+const FUNDAMENTALS_DESCRIPTIONS: Record<string, string> = {
+  'P/E': 'Preço da ação a dividir pelo lucro por ação (EPS). Quanto mais baixo, mais "barata" a ação parece face aos lucros atuais.',
+  EPS: 'Lucro por ação — lucro líquido da empresa a dividir pelo número total de ações.',
+  'Debt/Equity': 'Dívida total a dividir pelo capital próprio. Quanto mais alto, mais a empresa depende de dívida para se financiar.',
+  'Dividend Yield': 'Dividendo anual a dividir pelo preço da ação, em percentagem — quanto a ação "paga" em dividendos por ano.',
+};
+
 function formatCriterionValue(criterion: { threshold_value: number | null; threshold_value_max: number | null; operator: string }): string {
   if (criterion.operator === 'between') {
     return `${formatDecimal(criterion.threshold_value)} - ${formatDecimal(criterion.threshold_value_max)}`;
@@ -125,19 +136,19 @@ export default function StockDetail() {
         <>
           <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Fundamentais</h2>
           <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-6 grid grid-cols-2 gap-3 text-sm">
-            <div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['P/E']}>
               <p className="text-xs text-gray-500 dark:text-slate-400">P/E</p>
               <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.pe_ratio)}</p>
             </div>
-            <div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS.EPS}>
               <p className="text-xs text-gray-500 dark:text-slate-400">EPS</p>
               <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.eps)}</p>
             </div>
-            <div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['Debt/Equity']}>
               <p className="text-xs text-gray-500 dark:text-slate-400">Debt/Equity</p>
               <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.debt_to_equity)}</p>
             </div>
-            <div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['Dividend Yield']}>
               <p className="text-xs text-gray-500 dark:text-slate-400">Dividend Yield</p>
               <p className="text-gray-900 dark:text-slate-100">
                 {(() => {
