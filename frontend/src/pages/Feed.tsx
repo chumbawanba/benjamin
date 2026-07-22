@@ -1,7 +1,57 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
-import { Evaluation, StrategyTemplate, WatchlistItem } from '../api/types';
+import { BacktestChart as BacktestChartData, Evaluation, StrategyTemplate, WatchlistItem } from '../api/types';
+import BacktestChart from '../components/BacktestChart';
 import RecommendationBadge from '../components/RecommendationBadge';
+
+// Estado do gráfico de backtest de uma linha, isolado num componente próprio
+// para que o fetch aconteça só quando a linha é expandida (não para todas de
+// uma vez) e seja automaticamente refeito se a estratégia selecionada mudar.
+function BacktestSection({ templateId, stockId }: { templateId: string; stockId: string }) {
+  const [state, setState] = useState<{ loading: boolean; data?: BacktestChartData; error?: string }>({ loading: true });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ loading: true });
+    api
+      .get<BacktestChartData>(
+        `/evaluations/backtest-chart?template_id=${encodeURIComponent(templateId)}&stock_id=${encodeURIComponent(stockId)}`
+      )
+      .then((data) => {
+        if (!cancelled) setState({ loading: false, data });
+      })
+      .catch((err) => {
+        if (!cancelled) setState({ loading: false, error: err instanceof ApiError ? err.message : 'Erro ao carregar gráfico' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [templateId, stockId]);
+
+  return (
+    <div className="mt-3 border-t border-gray-100 dark:border-slate-800 pt-3">
+      <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">
+        Backtest — compras/vendas no último ano com os critérios atuais
+      </p>
+      {state.loading && <p className="text-xs text-gray-400 dark:text-slate-500">A carregar gráfico…</p>}
+      {state.error && <p className="text-xs text-red-500 dark:text-rose-400">{state.error}</p>}
+      {state.data && (
+        <>
+          <BacktestChart points={state.data.points} trades={state.data.trades} />
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-2">
+            Retorno simulado:{' '}
+            <span className={state.data.return_pct >= 0 ? 'text-green-600 dark:text-emerald-400' : 'text-red-500 dark:text-rose-400'}>
+              {state.data.return_pct.toFixed(2)}%
+            </span>
+            {state.data.buy_and_hold_return_pct !== null && (
+              <> · Comprar-e-manter: {state.data.buy_and_hold_return_pct.toFixed(2)}%</>
+            )}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function Feed({ embedded = false }: { embedded?: boolean }) {
   const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -191,6 +241,8 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
                   })}
                 </ul>
               )}
+
+              {expanded === ev.id && selectedTemplate && <BacktestSection templateId={selectedTemplate} stockId={ev.stock_id} />}
             </li>
           ))}
         </ul>

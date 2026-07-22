@@ -1,8 +1,53 @@
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from tests.conftest import login
 
-from app.models import StrategyItem, StrategyTemplate, WatchlistItem
+from app.models import PriceSnapshot, Stock, StrategyItem, StrategyTemplate, WatchlistItem
+
+
+def _cyclical_closes(cycles: int = 3, amplitude: float = 20.0, base: float = 100.0) -> list[float]:
+    """Serie com quedas e subidas marcadas, para gerar RSI sobrevendido/
+    sobrecomprado em pontos previsiveis (mesmo padrao de test_backtest_core.py,
+    duplicado aqui para nao acoplar os dois ficheiros de teste)."""
+    closes = []
+    for _ in range(cycles):
+        for i in range(15):
+            closes.append(base - amplitude * (i / 14))
+        for i in range(15):
+            closes.append(base - amplitude + amplitude * (i / 14))
+    return closes
+
+
+async def _setup_cyclical_stock(db_session, user):
+    """Ação sintética com ciclos de queda/subida bem marcados + estratégia
+    RSI sobrevendido/sobrecomprado -> a simulação deve comprar no fundo e
+    vender no topo pelo menos uma vez."""
+    closes = _cyclical_closes()
+    stock = Stock(ticker="CYC", name="Cyclical Co", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    n = len(closes)
+    for offset, price in enumerate(closes):
+        db_session.add(PriceSnapshot(
+            stock_id=stock.id, date=today - timedelta(days=n - offset),
+            close=Decimal(str(round(price, 2))),
+        ))
+    template = StrategyTemplate(user_id=user.id, name="RSI ciclos")
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add_all([
+        StrategyItem(template_id=template.id, name="RSI sobrevendido", metric="RSI_14",
+                     operator="<", threshold_value=Decimal("30"), weight=Decimal("1"),
+                     direction="buy_signal"),
+        StrategyItem(template_id=template.id, name="RSI sobrecomprado", metric="RSI_14",
+                     operator=">", threshold_value=Decimal("70"), weight=Decimal("1"),
+                     direction="sell_signal"),
+    ])
+    db_session.add(WatchlistItem(user_id=user.id, stock_id=stock.id))
+    await db_session.commit()
+    return template, stock, n
 
 
 async def _setup(db_session, user, stock):
@@ -132,3 +177,88 @@ async def test_latest_by_strategy_groups_and_excludes_hold(client, db_session, u
     hold_group = next(g for g in body if g["strategy_name"] == "Nunca dispara")
     assert hold_group["signals"] == []
     assert hold_group["horizon"] == "long_term"
+
+
+async def test_backtest_chart_returns_points_and_trades(client, db_session, user_a):
+    template, stock, n = await _setup_cyclical_stock(db_session, user_a)
+    headers = await login(client, "a@test.dev", "password-a")
+
+    resp = await client.get(
+        f"/evaluations/backtest-chart?template_id={template.id}&stock_id={stock.id}", headers=headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["points"]) == n
+    assert len(body["trades"]) >= 2
+    assert body["trades"][0]["action"] == "BUY"
+    assert all(t["action"] in {"BUY", "SELL"} for t in body["trades"])
+    assert all(t["date"] is not None for t in body["trades"])
+    assert isinstance(body["return_pct"], float)
+    assert isinstance(body["warmup_days"], int)
+
+
+async def test_backtest_chart_requires_auth(client, db_session, user_a):
+    template, stock, _ = await _setup_cyclical_stock(db_session, user_a)
+    resp = await client.get(f"/evaluations/backtest-chart?template_id={template.id}&stock_id={stock.id}")
+    assert resp.status_code == 401
+
+
+async def test_backtest_chart_foreign_template_returns_404(client, db_session, user_a, user_b):
+    template, stock, _ = await _setup_cyclical_stock(db_session, user_a)
+    headers_b = await login(client, "b@test.dev", "password-b")
+    resp = await client.get(
+        f"/evaluations/backtest-chart?template_id={template.id}&stock_id={stock.id}", headers=headers_b
+    )
+    assert resp.status_code == 404
+
+
+async def test_backtest_chart_stock_not_in_watchlist_returns_404(client, db_session, user_a, seeded_stock):
+    """seeded_stock não está associada a nenhuma watchlist nesta base de teste."""
+    template = await _setup(db_session, user_a, seeded_stock)
+    other_stock = Stock(ticker="OUT", name="Fora da watchlist", currency="USD")
+    db_session.add(other_stock)
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get(
+        f"/evaluations/backtest-chart?template_id={template.id}&stock_id={other_stock.id}", headers=headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_backtest_chart_insufficient_history_returns_400(client, db_session, user_a):
+    stock = Stock(ticker="NEW", name="Novata", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    for i in range(5, 0, -1):
+        db_session.add(PriceSnapshot(stock_id=stock.id, date=today - timedelta(days=i), close=Decimal("10.0")))
+    template = StrategyTemplate(user_id=user_a.id, name="T")
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(StrategyItem(
+        template_id=template.id, name="RSI qualquer", metric="RSI_14",
+        operator=">", threshold_value=Decimal("0"), weight=Decimal("1"), direction="buy_signal",
+    ))
+    db_session.add(WatchlistItem(user_id=user_a.id, stock_id=stock.id))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get(
+        f"/evaluations/backtest-chart?template_id={template.id}&stock_id={stock.id}", headers=headers
+    )
+    assert resp.status_code == 400
+
+
+async def test_backtest_chart_no_active_items_returns_400(client, db_session, user_a, seeded_stock):
+    template = StrategyTemplate(user_id=user_a.id, name="Vazia")
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(WatchlistItem(user_id=user_a.id, stock_id=seeded_stock.id))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get(
+        f"/evaluations/backtest-chart?template_id={template.id}&stock_id={seeded_stock.id}", headers=headers
+    )
+    assert resp.status_code == 400

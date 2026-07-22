@@ -6,12 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Evaluation, StrategyTemplate, User, WatchlistItem
+from app.models import Evaluation, StrategyItem, StrategyTemplate, User, WatchlistItem
 from app.schemas.common import (
-    EvaluationOut, RunEvaluationIn, StockOut, StrategySignalGroupOut, StrategySignalOut,
+    BacktestChartOut, BacktestPointOut, BacktestTradeOut, EvaluationOut, RunEvaluationIn, StockOut,
+    StrategySignalGroupOut, StrategySignalOut,
 )
 from app.security import get_current_user
-from app.services import agent, market_data
+from app.services import agent, backtest_core, market_data
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
@@ -141,6 +142,78 @@ async def latest_by_strategy(
             horizon=template.horizon, signals=signals,
         ))
     return groups
+
+
+@router.get("/backtest-chart", response_model=BacktestChartOut)
+async def backtest_chart(
+    template_id: uuid.UUID, stock_id: uuid.UUID,
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Simula, para UMA ação, o que os critérios ATUALMENTE guardados e ativos
+    da estratégia teriam feito nos últimos ~365 dias — compra tudo ao 1º sinal
+    BUY, vende tudo ao 1º sinal SELL seguinte (mesmo motor do otimizador, ver
+    backtest_core.simulate). Usado para desenhar o gráfico de compras/vendas
+    no separador Avaliações."""
+    template = (
+        await db.execute(select(StrategyTemplate).where(
+            StrategyTemplate.id == template_id, StrategyTemplate.user_id == user.id
+        ))
+    ).scalar_one_or_none()
+    if template is None:
+        raise HTTPException(status_code=404, detail="Estratégia não encontrada")
+
+    in_watchlist = (
+        await db.execute(select(WatchlistItem).where(
+            WatchlistItem.user_id == user.id, WatchlistItem.stock_id == stock_id
+        ))
+    ).scalar_one_or_none()
+    if in_watchlist is None:
+        raise HTTPException(status_code=404, detail="Ação não está na watchlist")
+
+    items_rows = (
+        await db.execute(
+            select(StrategyItem).where(
+                StrategyItem.template_id == template_id, StrategyItem.is_active.is_(True)
+            ).order_by(StrategyItem.display_order.asc().nulls_last())
+        )
+    ).scalars().all()
+    if not items_rows:
+        raise HTTPException(status_code=400, detail="Esta estratégia não tem critérios ativos")
+    items = [
+        {
+            "id": i.id, "metric": i.metric, "operator": i.operator,
+            "threshold_value": i.threshold_value, "threshold_value_max": i.threshold_value_max,
+            "weight": i.weight, "direction": i.direction,
+        }
+        for i in items_rows
+    ]
+
+    snapshots = await market_data.get_price_history(db, stock_id, days=365)
+    if len(snapshots) < backtest_core.MIN_HISTORY_DAYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Histórico de preços insuficiente para backtest (mínimo {backtest_core.MIN_HISTORY_DAYS} dias)",
+        )
+
+    closes = [float(s.close) for s in snapshots]
+    dates = [s.date for s in snapshots]
+    fundamentals_row = await market_data.get_latest_fundamentals(db, stock_id)
+    observed_fundamentals = backtest_core.fundamentals_to_observed(fundamentals_row)
+    series = backtest_core.build_stock_series("", closes, observed_fundamentals, dates=dates)
+
+    result = backtest_core.simulate(series, items, record_trades=True)
+    baseline = backtest_core.buy_and_hold_return(series)
+
+    return BacktestChartOut(
+        points=[BacktestPointOut(date=d, close=c) for d, c in zip(dates, closes)],
+        trades=[
+            BacktestTradeOut(date=t["date"], action=t["action"], price=t["price"])
+            for t in result["trade_events"]
+        ],
+        return_pct=result["return_pct"],
+        buy_and_hold_return_pct=baseline,
+        warmup_days=backtest_core.WARMUP_DAYS,
+    )
 
 
 @router.get("", response_model=list[EvaluationOut])

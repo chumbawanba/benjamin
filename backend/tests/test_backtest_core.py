@@ -30,6 +30,35 @@ def test_simulate_executes_buy_and_sell_trades():
     assert isinstance(result["return_pct"], float)
 
 
+def test_simulate_record_trades_returns_dated_events():
+    closes = _cyclical_closes()
+    today_offsets = list(range(len(closes)))  # datas fictícias, só para testar o alinhamento
+    dates = [f"day-{i}" for i in today_offsets]
+    fundamentals = {"PE_RATIO": None, "DIVIDEND_YIELD": None, "EPS": None,
+                     "DEBT_TO_EQUITY": None, "MARKET_CAP": None}
+    series = backtest_core.build_stock_series("TEST", closes, fundamentals, dates=dates)
+    items = [
+        {"metric": "RSI_14", "operator": "<", "threshold_value": 30,
+         "threshold_value_max": None, "weight": 1, "direction": "buy_signal"},
+        {"metric": "RSI_14", "operator": ">", "threshold_value": 70,
+         "threshold_value_max": None, "weight": 1, "direction": "sell_signal"},
+    ]
+    result = backtest_core.simulate(series, items, warmup_days=20, record_trades=True)
+    assert "trade_events" in result
+    assert len(result["trade_events"]) == result["trades"]
+    assert result["trade_events"][0]["action"] == "BUY"
+    for event in result["trade_events"]:
+        assert event["date"] in dates
+        assert event["price"] in closes
+
+
+def test_simulate_without_record_trades_omits_trade_events():
+    closes = _cyclical_closes()
+    series = backtest_core.build_stock_series("TEST", closes, {})
+    result = backtest_core.simulate(series, [], warmup_days=20)
+    assert "trade_events" not in result
+
+
 def test_simulate_never_trades_with_empty_ruleset():
     closes = _cyclical_closes()
     series = backtest_core.build_stock_series("TEST", closes, {})

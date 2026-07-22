@@ -51,6 +51,7 @@ class StockSeries:
     closes: list[float]
     fundamentals: dict[str, float | None]
     indicator_frame: dict[str, list[float | None]] = field(default_factory=dict)
+    dates: list = field(default_factory=list)  # list[datetime.date], alinhado 1:1 com closes
 
 
 def _to_list(series: pd.Series) -> list[float | None]:
@@ -120,10 +121,13 @@ def _expanding_indicator_frame(closes: list[float]) -> dict[str, list[float | No
     return frame
 
 
-def build_stock_series(ticker: str, closes: list[float], fundamentals: dict[str, float | None]) -> StockSeries:
+def build_stock_series(
+    ticker: str, closes: list[float], fundamentals: dict[str, float | None], dates: list | None = None,
+) -> StockSeries:
     return StockSeries(
         ticker=ticker, closes=closes, fundamentals=fundamentals,
         indicator_frame=_expanding_indicator_frame(closes),
+        dates=dates or [],
     )
 
 
@@ -144,10 +148,15 @@ def fundamentals_to_observed(row) -> dict[str, float | None]:
 
 
 def simulate(series: StockSeries, items: list[dict], warmup_days: int = WARMUP_DAYS,
-             capital: float = INITIAL_CAPITAL) -> dict:
+             capital: float = INITIAL_CAPITAL, record_trades: bool = False) -> dict:
     """Compra ao 1º sinal BUY (todo o capital disponível), vende ao 1º sinal
-    SELL seguinte (posição toda). Sem alavancagem, sem custos de transação."""
+    SELL seguinte (posição toda). Sem alavancagem, sem custos de transação.
+
+    `record_trades=False` por omissão porque o otimizador chama isto milhares
+    de vezes (greedy search sobre CANDIDATE_SPECS) e não precisa da lista de
+    eventos — só quem quer desenhar um gráfico de compras/vendas passa True."""
     shares, cash, trades = 0.0, capital, 0
+    trade_events: list[dict] = []
     n = len(series.closes)
     start = min(warmup_days, max(n - 1, 0))
     for i in range(start, n):
@@ -159,13 +168,24 @@ def simulate(series: StockSeries, items: list[dict], warmup_days: int = WARMUP_D
         if result.recommendation == "BUY" and shares == 0 and price:
             shares, cash = cash / price, 0.0
             trades += 1
+            if record_trades:
+                trade_events.append({
+                    "date": series.dates[i] if series.dates else None, "action": "BUY", "price": price,
+                })
         elif result.recommendation == "SELL" and shares > 0:
             cash, shares = shares * price, 0.0
             trades += 1
+            if record_trades:
+                trade_events.append({
+                    "date": series.dates[i] if series.dates else None, "action": "SELL", "price": price,
+                })
     final_price = series.closes[-1] if series.closes else 0.0
     final_value = cash + shares * final_price
     return_pct = round((final_value / capital - 1) * 100, 2) if capital else 0.0
-    return {"return_pct": return_pct, "trades": trades}
+    out = {"return_pct": return_pct, "trades": trades}
+    if record_trades:
+        out["trade_events"] = trade_events
+    return out
 
 
 def buy_and_hold_return(series: StockSeries, warmup_days: int = WARMUP_DAYS) -> float | None:

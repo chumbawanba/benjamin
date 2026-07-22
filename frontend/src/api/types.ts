@@ -213,6 +213,25 @@ export interface OptimizeResult {
   stocks_evaluated: number;
 }
 
+export interface BacktestPoint {
+  date: string;
+  close: number;
+}
+
+export interface BacktestTrade {
+  date: string | null;
+  action: 'BUY' | 'SELL';
+  price: number;
+}
+
+export interface BacktestChart {
+  points: BacktestPoint[];
+  trades: BacktestTrade[];
+  return_pct: number;
+  buy_and_hold_return_pct: number | null;
+  warmup_days: number;
+}
+
 // Campos numéricos vêm como Decimal do backend -> string em JSON (ver
 // PriceChange.tsx) - por isso number | string aqui, convertidos com Number()
 // no componente que os usa.

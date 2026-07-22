@@ -281,6 +281,27 @@ class OptimizeResultOut(BaseModel):
     stocks_evaluated: int
 
 
+class BacktestPointOut(BaseModel):
+    """Ponto de preço para o gráfico de backtest - float de propósito, mesma
+    razão da OptimizeItemOut (vem do backtest_core, que trabalha em float)."""
+    date: date
+    close: float
+
+
+class BacktestTradeOut(BaseModel):
+    date: date | None
+    action: str  # "BUY" | "SELL"
+    price: float
+
+
+class BacktestChartOut(BaseModel):
+    points: list[BacktestPointOut]
+    trades: list[BacktestTradeOut]
+    return_pct: float
+    buy_and_hold_return_pct: float | None
+    warmup_days: int
+
+
 class StrategyTemplateOut(BaseModel):
     id: uuid.UUID
     name: str
