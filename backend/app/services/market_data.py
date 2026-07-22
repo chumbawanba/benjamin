@@ -222,15 +222,30 @@ async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
 
 
 async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
-    """Atualiza snapshots se o mais recente tiver mais de FRESHNESS_DAYS."""
+    """Atualiza snapshots se o mais recente tiver mais de FRESHNESS_DAYS, OU se
+    ainda não houver histórico suficiente (< MIN_HISTORY_ROWS).
+
+    A segunda condição é necessária por si só: uma ação com um snapshot de
+    hoje (via Finnhub /quote, que corre em todo refresh_prices) mas cujo
+    backfill de 365 dias nunca teve sucesso (ex: symbol não reconhecido pela
+    Twelve Data, ver _alt_ticker_symbol) tinha sempre `latest` = hoje, logo
+    ficava "fresca" para sempre e nunca mais tentava o backfill outra vez -
+    ficava com histórico insuficiente indefinidamente mesmo já com a correção
+    do formato do símbolo em vigor."""
     await _backfill_profile(db, stock)
     latest = (
         await db.execute(
             select(func.max(PriceSnapshot.date)).where(PriceSnapshot.stock_id == stock.id)
         )
     ).scalar_one_or_none()
+    count = (
+        await db.execute(
+            select(func.count()).select_from(PriceSnapshot).where(PriceSnapshot.stock_id == stock.id)
+        )
+    ).scalar_one()
     today = datetime.now(timezone.utc).date()
-    if latest is not None and (today - latest) <= timedelta(days=FRESHNESS_DAYS):
+    is_recent = latest is not None and (today - latest) <= timedelta(days=FRESHNESS_DAYS)
+    if is_recent and count >= MIN_HISTORY_ROWS:
         return
     await refresh_prices(db, stock)
     await refresh_fundamentals(db, stock)

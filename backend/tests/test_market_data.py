@@ -88,6 +88,47 @@ async def test_get_price_change_no_snapshots(db_session):
     assert change_pct is None
 
 
+async def test_ensure_fresh_retries_when_recent_but_insufficient_history(db_session):
+    """Uma stock com um snapshot de HOJE (ex: só o /quote da Finnhub alguma
+    vez funcionou) mas muito abaixo de MIN_HISTORY_ROWS não pode ficar
+    'fresca' para sempre - sem isto, o backfill de histórico nunca mais era
+    tentado outra vez (ver bug real: BRK.B preso em histórico insuficiente)."""
+    stock = Stock(ticker="AAPL", name="Apple Inc.", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    db_session.add(PriceSnapshot(stock_id=stock.id, date=today, close=Decimal("150.00")))
+    await db_session.commit()
+
+    finnhub_mock = AsyncMock(return_value={"c": 151.0})
+    twelvedata_mock = AsyncMock(return_value={"values": []})
+    with patch("app.services.market_data._finnhub_get", new=finnhub_mock), \
+         patch("app.services.market_data._twelvedata_get", new=twelvedata_mock):
+        await market_data.ensure_fresh(db_session, stock)
+
+    # refresh_prices chamou a Twelve Data outra vez apesar do snapshot de hoje já existir
+    twelvedata_mock.assert_called()
+
+
+async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session):
+    """Com histórico completo (>= MIN_HISTORY_ROWS) e um snapshot recente, o
+    curto-circuito de freshness continua a funcionar - não deve voltar a
+    chamar nenhum fornecedor externo."""
+    stock = Stock(ticker="AAPL", name="Apple Inc.", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    for i in range(market_data.MIN_HISTORY_ROWS):
+        db_session.add(PriceSnapshot(
+            stock_id=stock.id, date=today - timedelta(days=i), close=Decimal("150.00"),
+        ))
+    await db_session.commit()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))), \
+         patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        await market_data.ensure_fresh(db_session, stock)  # não deve lançar
+
+
 def test_alt_ticker_symbol_swaps_dot_to_hyphen():
     assert market_data._alt_ticker_symbol("BRK.B") == "BRK-B"
 
