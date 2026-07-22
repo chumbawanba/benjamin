@@ -20,6 +20,17 @@ from app.models import FundamentalsSnapshot, PriceSnapshot, Stock, User
 from app.security import hash_password
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """O rate limiter (app/services/rate_limit.py) usa um dict em memória a
+    nível de módulo — sem isto, chamadas de um teste ficavam a contar para o
+    limite de outro teste que reutilize o mesmo utilizador/endpoint."""
+    from app.services.rate_limit import _hits
+    _hits.clear()
+    yield
+    _hits.clear()
+
+
 @pytest_asyncio.fixture
 async def db_engine():
     engine = create_async_engine("sqlite+aiosqlite://")

@@ -30,6 +30,7 @@ from app.schemas.common import (
 )
 from app.security import get_current_user
 from app.services import agent, indicators, market_data
+from app.services.rate_limit import rate_limit_user
 from app.services.indicators_core import INDICATORS
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,8 @@ async def _to_dto(db: AsyncSession, user_id: uuid.UUID, item: WatchlistItem) -> 
 
 @router.get("/search", response_model=list[TickerSearchResult])
 async def search_stocks(
-    q: str = Query(min_length=1, max_length=50), user: User = Depends(get_current_user)
+    q: str = Query(min_length=1, max_length=50),
+    user: User = Depends(rate_limit_user("watchlist_search", max_calls=30, window_seconds=60)),
 ):
     """Pesquisa tickers por nome/símbolo (ex: 'apple' -> AAPL) para facilitar
     adicionar à watchlist sem saber o símbolo exato de cor."""
@@ -77,7 +79,7 @@ async def search_stocks(
 @router.get("/news", response_model=list[NewsItemOut])
 async def watchlist_news(
     limit: int = Query(default=20, le=50),
-    user: User = Depends(get_current_user),
+    user: User = Depends(rate_limit_user("watchlist_news", max_calls=10, window_seconds=300)),
     db: AsyncSession = Depends(get_db),
 ):
     """Notícias recentes das ações da watchlist, agregadas e ordenadas por
@@ -251,7 +253,7 @@ async def reorder_watchlist(
 @router.post("", response_model=WatchlistItemOut, status_code=201)
 async def add_to_watchlist(
     body: WatchlistItemIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(rate_limit_user("watchlist_add", max_calls=20, window_seconds=600)),
     db: AsyncSession = Depends(get_db),
 ):
     stock = await market_data.validate_and_create_stock(db, body.ticker)
