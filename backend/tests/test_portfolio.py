@@ -174,6 +174,42 @@ async def test_set_portfolio_currency_requires_auth(client):
     assert resp.status_code == 401
 
 
+async def test_fx_rates_lists_currencies_used_in_portfolio(client, user_a, seeded_stock):
+    """seeded_stock é USD, preferred_currency por defeito é EUR - deve aparecer
+    exatamente um par USD->EUR, com o rate=0.9 do mock global deste ficheiro."""
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post("/portfolio", json={"ticker": "AAPL", "quantity": "1", "avg_cost": "100"}, headers=headers)
+
+    resp = await client.get("/portfolio/fx-rates", headers=headers)
+    assert resp.status_code == 200
+    rates = resp.json()
+    assert len(rates) == 1
+    assert rates[0]["base_currency"] == "USD"
+    assert rates[0]["quote_currency"] == "EUR"
+    assert Decimal(rates[0]["rate"]) == Decimal("0.9")
+
+
+async def test_fx_rates_empty_when_same_currency(client, user_a, seeded_stock):
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.put("/portfolio/currency", json={"currency": "USD"}, headers=headers)
+    await client.post("/portfolio", json={"ticker": "AAPL", "quantity": "1", "avg_cost": "100"}, headers=headers)
+
+    resp = await client.get("/portfolio/fx-rates", headers=headers)
+    assert resp.json() == []
+
+
+async def test_fx_rates_empty_without_positions(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get("/portfolio/fx-rates", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_fx_rates_requires_auth(client):
+    resp = await client.get("/portfolio/fx-rates")
+    assert resp.status_code == 401
+
+
 async def test_cascade_delete_position_with_user(client, db_session, user_a, seeded_stock):
     """positions.user_id tem ON DELETE CASCADE (ver migração b2c3d4e5f6a7) —
     confirma que apagar o utilizador não deixa IntegrityError nem posições

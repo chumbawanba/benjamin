@@ -217,6 +217,13 @@ class PortfolioCurrencyIn(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
 
 
+class FxRateOut(BaseModel):
+    base_currency: str
+    quote_currency: str
+    rate: Decimal
+    date: date
+
+
 # ---- Strategies ----
 class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)

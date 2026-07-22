@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Position, User
+from app.models import FxRateSnapshot, Position, Stock, User
 from app.schemas.common import (
-    PortfolioCurrencyIn, PortfolioCurrencyOut, PositionIn, PositionOut, PositionUpdateIn, StockOut,
+    FxRateOut, PortfolioCurrencyIn, PortfolioCurrencyOut, PositionIn, PositionOut, PositionUpdateIn, StockOut,
 )
 from app.security import get_current_user
 from app.services import fx, market_data
@@ -82,6 +83,45 @@ async def set_currency(
     user.preferred_currency = body.currency.upper().strip()
     await db.commit()
     return PortfolioCurrencyOut(currency=user.preferred_currency)
+
+
+@router.get("/fx-rates", response_model=list[FxRateOut])
+async def list_fx_rates(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Taxas de câmbio atualmente usadas para converter o portfolio - só as
+    moedas das ações que o utilizador realmente tem, contra a moeda preferida
+    (mesmas que list_positions usa, ver _to_dto). Serve de referência para o
+    utilizador consultar em caso de dúvida sobre um valor convertido."""
+    target = user.preferred_currency
+    currencies = (
+        await db.execute(
+            select(Stock.currency).join(Position, Position.stock_id == Stock.id)
+            .where(Position.user_id == user.id, Stock.currency.is_not(None))
+            .distinct()
+        )
+    ).scalars().all()
+
+    today = datetime.now(timezone.utc).date()
+    results = []
+    for currency in currencies:
+        if currency == target:
+            continue
+        rate = await fx.get_rate(db, currency, target)
+        if rate is None:
+            continue
+        snapshot = (
+            await db.execute(
+                select(FxRateSnapshot)
+                .where(FxRateSnapshot.base_currency == currency, FxRateSnapshot.quote_currency == target)
+                .order_by(FxRateSnapshot.date.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+        results.append(FxRateOut(
+            base_currency=currency, quote_currency=target, rate=rate,
+            date=snapshot.date if snapshot else today,
+        ))
+    return results
 
 
 @router.post("", response_model=PositionOut, status_code=201)

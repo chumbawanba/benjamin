@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { PortfolioCurrency, Position } from '../api/types';
 import PriceChange from '../components/PriceChange';
@@ -179,6 +180,10 @@ export default function Portfolio() {
         </label>
       </div>
 
+      <Link to="/portfolio/fx-rates" className="inline-block text-xs text-navy-600 dark:text-navy-400 font-medium mb-4">
+        Ver taxas de câmbio →
+      </Link>
+
       {totals.hasAny && (
         <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-3 gap-2 text-center">
           <div>
@@ -238,6 +243,11 @@ export default function Portfolio() {
             {adding ? '…' : 'Adicionar'}
           </button>
         </div>
+        <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
+          O preço médio deve estar na moeda em que a ação negoceia (ex: USD para ações dos EUA, EUR para
+          europeias) — não na tua moeda preferida. A conversão para a moeda que escolheste acima é feita
+          automaticamente.
+        </p>
         {addError && <p className="text-xs text-red-600 dark:text-rose-400 mt-2">{addError}</p>}
       </form>
 
@@ -305,6 +315,7 @@ export default function Portfolio() {
                       inputMode="decimal"
                       className="w-24 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm"
                     />
+                    <span className="text-xs text-gray-400 dark:text-slate-500">{p.stock.currency ?? ''}</span>
                     <button
                       onClick={() => saveEdit(p.id)}
                       disabled={editSaving}

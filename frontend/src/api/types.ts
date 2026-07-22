@@ -230,3 +230,10 @@ export interface Position {
 export interface PortfolioCurrency {
   currency: string;
 }
+
+export interface FxRate {
+  base_currency: string;
+  quote_currency: string;
+  rate: number | string;
+  date: string;
+}
