@@ -1,18 +1,20 @@
 import { useSearchParams } from 'react-router-dom';
+import StrategyLibrary from '../components/StrategyLibrary';
 import Feed from './Feed';
 import Strategies from './Strategies';
 import Watchlist from './Watchlist';
 
-type SubTab = 'watchlist' | 'estrategias' | 'avaliacoes';
+type SubTab = 'watchlist' | 'estrategias' | 'avaliacoes' | 'biblioteca';
 
 const TABS: [SubTab, string][] = [
   ['watchlist', 'Watchlist'],
   ['estrategias', 'Estratégias'],
   ['avaliacoes', 'Avaliações'],
+  ['biblioteca', 'Biblioteca'],
 ];
 
 function isSubTab(value: string | null): value is SubTab {
-  return value === 'watchlist' || value === 'estrategias' || value === 'avaliacoes';
+  return value === 'watchlist' || value === 'estrategias' || value === 'avaliacoes' || value === 'biblioteca';
 }
 
 // Agrupa as 3 páginas de "parametrização" (adicionar tickers, afinar critérios,
@@ -57,6 +59,7 @@ export default function StrategyWorkspace() {
       {tab === 'watchlist' && <Watchlist embedded />}
       {tab === 'estrategias' && <Strategies embedded />}
       {tab === 'avaliacoes' && <Feed embedded />}
+      {tab === 'biblioteca' && <StrategyLibrary />}
     </div>
   );
 }

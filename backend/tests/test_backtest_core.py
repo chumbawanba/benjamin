@@ -105,13 +105,22 @@ def test_fundamentals_to_observed_applies_scale():
         debt_to_equity = 0.8
         dividend_yield = 0.01
         market_cap = 5_000_000_000
+        roe = 18.5
+        net_margin = 22.0
+        revenue_growth = 8.5
 
     observed = backtest_core.fundamentals_to_observed(FakeRow())
     assert observed["PE_RATIO"] == 15.0
     assert observed["MARKET_CAP"] == 5.0  # escalado para mil milhoes
+    assert observed["ROE"] == 18.5  # sem escala - ja vem em percentagem
+    assert observed["NET_MARGIN"] == 22.0
+    assert observed["REVENUE_GROWTH"] == 8.5
 
 
 def test_fundamentals_to_observed_handles_none_row():
     observed = backtest_core.fundamentals_to_observed(None)
     assert all(v is None for v in observed.values())
-    assert set(observed.keys()) == {"PE_RATIO", "DIVIDEND_YIELD", "EPS", "DEBT_TO_EQUITY", "MARKET_CAP"}
+    assert set(observed.keys()) == {
+        "PE_RATIO", "DIVIDEND_YIELD", "EPS", "DEBT_TO_EQUITY", "MARKET_CAP",
+        "ROE", "NET_MARGIN", "REVENUE_GROWTH",
+    }

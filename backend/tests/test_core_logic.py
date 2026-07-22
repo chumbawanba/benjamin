@@ -118,6 +118,7 @@ class TestIndicators(unittest.TestCase):
         expected = {
             "PRICE_CLOSE", "RSI_14", "SMA_50", "SMA_200", "PE_RATIO", "DIVIDEND_YIELD",
             "EPS", "DEBT_TO_EQUITY", "MARKET_CAP", "PRICE_VS_SMA_50", "PRICE_VS_SMA_200",
+            "ROE", "NET_MARGIN", "REVENUE_GROWTH",
         }
         self.assertEqual(set(INDICATORS.keys()), expected)
 

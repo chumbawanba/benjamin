@@ -42,6 +42,9 @@ CANDIDATE_SPECS: list[tuple[str, str, str, list[float]]] = [
     ("PRICE_VS_SMA_50", "sell_signal", "<", [-5, -2, 0]),
     ("PRICE_VS_SMA_200", "buy_signal", ">", [0, 2, 5]),
     ("PRICE_VS_SMA_200", "sell_signal", "<", [-5, -2, 0]),
+    ("ROE", "buy_signal", ">", [10, 15, 20]),
+    ("NET_MARGIN", "buy_signal", ">", [5, 10, 15, 20]),
+    ("REVENUE_GROWTH", "buy_signal", ">", [0, 5, 10]),
 ]
 
 

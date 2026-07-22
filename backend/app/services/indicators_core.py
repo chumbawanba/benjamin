@@ -148,4 +148,24 @@ INDICATORS: dict[str, dict] = {
         "unit": "mil milhões de USD, não o valor absoluto (ex: escreve 500 para $500 mil milhões)",
         "trend": "Mais alto = empresa maior/mais estabelecida (tipicamente menos volátil); mais baixo = empresa mais pequena (potencialmente mais volátil).",
     },
+    "ROE": {
+        "kind": "fundamental", "field": "roe", "lookback_days": 0,
+        "description": "Rentabilidade do capital próprio (ROE) — lucro gerado por cada euro/"
+                       "dólar de capital próprio investido na empresa, últimos 12 meses.",
+        "unit": "percentagem (ex: 15 = ROE de 15%, não 0.15)",
+        "trend": "Mais alto = empresa gera mais lucro com o capital próprio que tem (tipicamente sinal de qualidade); mais baixo = usa o capital de forma menos eficiente.",
+    },
+    "NET_MARGIN": {
+        "kind": "fundamental", "field": "net_margin", "lookback_days": 0,
+        "description": "Margem líquida — que fração de cada euro/dólar de receita sobra como "
+                       "lucro, depois de todos os custos.",
+        "unit": "percentagem (ex: 20 = margem líquida de 20%, não 0.20)",
+        "trend": "Mais alto = empresa converte mais receita em lucro (tipicamente sinal de qualidade/poder de precificação); mais baixo = margens mais apertadas.",
+    },
+    "REVENUE_GROWTH": {
+        "kind": "fundamental", "field": "revenue_growth", "lookback_days": 0,
+        "description": "Crescimento da receita, ano a ano (YoY), últimos 12 meses.",
+        "unit": "percentagem (ex: 10 = receita cresceu 10% face ao ano anterior)",
+        "trend": "Mais alto = negócio a crescer mais depressa; mais baixo ou negativo = crescimento a abrandar ou receita a encolher.",
+    },
 }
