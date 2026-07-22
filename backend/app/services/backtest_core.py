@@ -10,10 +10,11 @@ Limitações conhecidas (documentadas para o utilizador na UI):
 - Fundamentais (P/E, EPS, etc.) são tratados como constantes ao longo de todo
   o período, usando o valor mais recente conhecido — a app só guarda o
   "snapshot" mais recente de fundamentais, não um histórico diário.
-- Só indicadores com escala comparável entre ações diferentes (RSI, rácios)
-  entram no conjunto de candidatos do otimizador; preço/médias móveis (SMA,
-  PRICE_CLOSE) ficam de fora porque o nível absoluto não é comparável entre
-  ações distintas na mesma estratégia.
+- Só indicadores com escala comparável entre ações diferentes (RSI, rácios,
+  PRICE_VS_SMA_50/200) entram no conjunto de candidatos do otimizador;
+  preço/médias móveis absolutos (SMA_50, SMA_200, PRICE_CLOSE) ficam de fora
+  porque o nível de preço não é comparável entre ações distintas na mesma
+  estratégia — usa-se a versão relativa (% face à média) em vez disso.
 """
 from dataclasses import dataclass, field
 
@@ -37,6 +38,10 @@ CANDIDATE_SPECS: list[tuple[str, str, str, list[float]]] = [
     ("DIVIDEND_YIELD", "buy_signal", ">", [0.005, 0.01, 0.015, 0.02, 0.03]),
     ("EPS", "buy_signal", ">", [0, 1, 2]),
     ("MARKET_CAP", "buy_signal", ">", [1, 10, 50, 200]),
+    ("PRICE_VS_SMA_50", "buy_signal", ">", [0, 2, 5]),
+    ("PRICE_VS_SMA_50", "sell_signal", "<", [-5, -2, 0]),
+    ("PRICE_VS_SMA_200", "buy_signal", ">", [0, 2, 5]),
+    ("PRICE_VS_SMA_200", "sell_signal", "<", [-5, -2, 0]),
 ]
 
 
@@ -65,10 +70,10 @@ def _expanding_indicator_frame(closes: list[float]) -> dict[str, list[float | No
     depende de linhas <= i), logo dão exatamente o mesmo resultado que
     indicators_core.calc_sma/calc_rsi chamados dia a dia, mas em O(n).
 
-    Só cobre os 4 indicadores price-kind atuais (PRICE_CLOSE, RSI_14, SMA_50,
-    SMA_200); qualquer indicador price-kind novo cai no fallback lento — não
-    fica silenciosamente de fora, mas é preciso vetorizá-lo aqui para manter
-    o otimizador rápido.
+    Só cobre os indicadores price-kind vetorizáveis conhecidos (PRICE_CLOSE,
+    RSI_14, SMA_50, SMA_200, PRICE_VS_SMA_50, PRICE_VS_SMA_200); qualquer
+    indicador price-kind novo cai no fallback lento — não fica silenciosamente
+    de fora, mas é preciso vetorizá-lo aqui para manter o otimizador rápido.
     """
     s = pd.Series(closes, dtype=float)
     frame: dict[str, list[float | None]] = {}
@@ -77,12 +82,22 @@ def _expanding_indicator_frame(closes: list[float]) -> dict[str, list[float | No
     if "PRICE_CLOSE" in INDICATORS:
         frame["PRICE_CLOSE"] = _to_list(s)
         handled.add("PRICE_CLOSE")
+    sma_50 = s.rolling(50).mean()
+    sma_200 = s.rolling(200).mean()
     if "SMA_50" in INDICATORS:
-        frame["SMA_50"] = _to_list(s.rolling(50).mean())
+        frame["SMA_50"] = _to_list(sma_50)
         handled.add("SMA_50")
     if "SMA_200" in INDICATORS:
-        frame["SMA_200"] = _to_list(s.rolling(200).mean())
+        frame["SMA_200"] = _to_list(sma_200)
         handled.add("SMA_200")
+    if "PRICE_VS_SMA_50" in INDICATORS:
+        # .where(sma_50 != 0) evita inf quando a média é 0 (ação sem valor) -
+        # mesma regra de segurança do cálculo não vetorizado (calc_price_vs_sma).
+        frame["PRICE_VS_SMA_50"] = _to_list(((s - sma_50) / sma_50 * 100).where(sma_50 != 0))
+        handled.add("PRICE_VS_SMA_50")
+    if "PRICE_VS_SMA_200" in INDICATORS:
+        frame["PRICE_VS_SMA_200"] = _to_list(((s - sma_200) / sma_200 * 100).where(sma_200 != 0))
+        handled.add("PRICE_VS_SMA_200")
     if "RSI_14" in INDICATORS:
         period = 14
         delta = s.diff()

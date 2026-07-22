@@ -37,6 +37,23 @@ def latest_close(closes: pd.Series) -> float | None:
     return float(closes.iloc[-1])
 
 
+def calc_price_vs_sma(closes: pd.Series, period: int) -> float | None:
+    """% de diferença entre o último fecho e a SMA(period) - ex: 5.0 = preço
+    5% acima da média, -3.0 = preço 3% abaixo. Ao contrário de PRICE_CLOSE ou
+    SMA_50/SMA_200 (valores absolutos, na moeda da ação), esta métrica é
+    adimensional/percentual: um threshold como '> 0' funciona igual para
+    qualquer ação, independentemente da escala de preço (ver conversa com o
+    utilizador - SMA_200 sozinho não é comparável entre ações com preços
+    muito diferentes, ex: 20 vs 2000)."""
+    sma = calc_sma(closes, period)
+    if sma is None or sma == 0:
+        return None
+    last = latest_close(closes)
+    if last is None:
+        return None
+    return (last - sma) / sma * 100
+
+
 # Registry: chave -> (funcao(closes|fundamental), lookback_days, tipo, descricao)
 # tipo "price": recebe Series de closes; tipo "fundamental": lookup direto por campo.
 # "description": explicação curta do que é a métrica.
@@ -50,7 +67,9 @@ def latest_close(closes: pd.Series) -> float | None:
 INDICATORS: dict[str, dict] = {
     "PRICE_CLOSE": {
         "kind": "price", "fn": latest_close, "lookback_days": 1,
-        "description": "Último preço de fecho da ação.",
+        "description": "Último preço de fecho da ação. Valor absoluto - um threshold fixo "
+                       "só faz sentido para uma ação específica, não numa estratégia aplicada "
+                       "a várias ações com preços muito diferentes.",
         "unit": "preço na moeda nativa da ação (ex: 185.30)",
         "trend": "Não tem 'bom' ou 'mau' por si só - serve para comparar com outro preço ou média (ex: SMA_200).",
     },
@@ -63,15 +82,37 @@ INDICATORS: dict[str, dict] = {
     },
     "SMA_50": {
         "kind": "price", "fn": lambda c: calc_sma(c, 50), "lookback_days": 60,
-        "description": "Média móvel simples de 50 dias — tendência de curto/médio prazo.",
+        "description": "Média móvel simples de 50 dias — tendência de curto/médio prazo. Valor "
+                       "absoluto (preço) - numa estratégia com várias ações de preços muito "
+                       "diferentes, considera usar PRICE_VS_SMA_50 em vez desta.",
         "unit": "preço na moeda nativa da ação (ex: 185.30)",
         "trend": "Preço a negociar acima da média = tendência de subida; abaixo = tendência de descida.",
     },
     "SMA_200": {
         "kind": "price", "fn": lambda c: calc_sma(c, 200), "lookback_days": 210,
-        "description": "Média móvel simples de 200 dias — tendência de longo prazo.",
+        "description": "Média móvel simples de 200 dias — tendência de longo prazo. Valor "
+                       "absoluto (preço) - numa estratégia com várias ações de preços muito "
+                       "diferentes, considera usar PRICE_VS_SMA_200 em vez desta.",
         "unit": "preço na moeda nativa da ação (ex: 185.30)",
         "trend": "Preço a negociar acima da média = tendência de subida de longo prazo; abaixo = tendência de descida.",
+    },
+    "PRICE_VS_SMA_50": {
+        "kind": "price", "fn": lambda c: calc_price_vs_sma(c, 50), "lookback_days": 60,
+        "description": "Diferença entre o preço atual e a SMA_50, em percentagem — versão "
+                       "relativa da SMA_50, comparável entre ações com preços muito diferentes "
+                       "(ao contrário de SMA_50/SMA_200/PRICE_CLOSE, que são valores absolutos).",
+        "unit": "percentagem (ex: 5 = preço 5% acima da média; -3 = 3% abaixo)",
+        "trend": "Mais alto = preço bem acima da média de 50 dias (tendência de subida de curto/médio prazo); mais baixo/negativo = preço abaixo da média (tendência de descida). Perto de 0 = preço colado à média.",
+    },
+    "PRICE_VS_SMA_200": {
+        "kind": "price", "fn": lambda c: calc_price_vs_sma(c, 200), "lookback_days": 210,
+        "description": "Diferença entre o preço atual e a SMA_200, em percentagem — versão "
+                       "relativa da SMA_200, comparável entre ações com preços muito diferentes "
+                       "(ao contrário de SMA_50/SMA_200/PRICE_CLOSE, que são valores absolutos). "
+                       "É esta a métrica recomendada para critérios de estratégia baseados em "
+                       "média móvel, quando a estratégia se aplica a mais do que uma ação.",
+        "unit": "percentagem (ex: 5 = preço 5% acima da média; -3 = 3% abaixo)",
+        "trend": "Mais alto = preço bem acima da média de 200 dias (tendência de subida de longo prazo); mais baixo/negativo = preço abaixo da média (tendência de descida). Perto de 0 = preço colado à média.",
     },
     "PE_RATIO": {
         "kind": "fundamental", "field": "pe_ratio", "lookback_days": 0,

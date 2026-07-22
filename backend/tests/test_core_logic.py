@@ -7,7 +7,7 @@ import unittest
 import pandas as pd
 
 from app.services.agent_core import apply_operator, compute_evaluation
-from app.services.indicators_core import INDICATORS, calc_rsi, calc_sma, latest_close
+from app.services.indicators_core import INDICATORS, calc_price_vs_sma, calc_rsi, calc_sma, latest_close
 
 
 def make_items():
@@ -117,9 +117,32 @@ class TestIndicators(unittest.TestCase):
     def test_registry_has_all_mvp_indicators(self):
         expected = {
             "PRICE_CLOSE", "RSI_14", "SMA_50", "SMA_200", "PE_RATIO", "DIVIDEND_YIELD",
-            "EPS", "DEBT_TO_EQUITY", "MARKET_CAP",
+            "EPS", "DEBT_TO_EQUITY", "MARKET_CAP", "PRICE_VS_SMA_50", "PRICE_VS_SMA_200",
         }
         self.assertEqual(set(INDICATORS.keys()), expected)
+
+    def test_price_vs_sma_known_value(self):
+        # SMA(5) dos ultimos 5 valores = 3.0; ultimo fecho = 5.0 -> (5-3)/3*100
+        closes = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.assertAlmostEqual(calc_price_vs_sma(closes, 5), 66.6666, places=3)
+
+    def test_price_vs_sma_price_below_average_is_negative(self):
+        closes = pd.Series([10.0, 9.0, 8.0, 7.0, 6.0])  # SMA=8, ultimo=6 -> -25%
+        self.assertAlmostEqual(calc_price_vs_sma(closes, 5), -25.0, places=3)
+
+    def test_price_vs_sma_insufficient_history(self):
+        self.assertIsNone(calc_price_vs_sma(pd.Series([1.0, 2.0]), 5))
+
+    def test_price_vs_sma_scale_invariant_across_stocks(self):
+        """A mesma forma relativa (10% acima da media) da o mesmo resultado
+        independentemente do nivel de preco - e exatamente o que SMA_200
+        sozinho nao garante (ver conversa com o utilizador sobre acoes com
+        precos muito diferentes na mesma estrategia)."""
+        cheap_stock = pd.Series([18.0, 19.0, 20.0, 21.0, 22.0])  # SMA=20, ultimo=22
+        expensive_stock = pd.Series([1800.0, 1900.0, 2000.0, 2100.0, 2200.0])  # SMA=2000, ultimo=2200
+        self.assertAlmostEqual(
+            calc_price_vs_sma(cheap_stock, 5), calc_price_vs_sma(expensive_stock, 5), places=6
+        )
 
 
 if __name__ == "__main__":
