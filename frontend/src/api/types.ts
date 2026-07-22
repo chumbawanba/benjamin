@@ -94,6 +94,8 @@ export interface MetricInfo {
   kind: 'price' | 'fundamental';
   lookback_days: number;
   description: string | null;
+  unit: string | null;
+  trend: string | null;
 }
 
 export interface NewsItem {

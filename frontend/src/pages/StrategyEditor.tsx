@@ -5,6 +5,27 @@ import { MetricInfo, StrategyItem, StrategyItemInput, StrategyTemplate } from '.
 
 const OPERATORS = ['<', '>', '<=', '>=', '==', 'between'];
 
+// Impacto de subir/descer o threshold é puramente mecânico face ao operador
+// escolhido - não depende da métrica em si (ao contrário de unit/trend, que
+// vêm do backend por métrica, ver INDICATORS em indicators_core.py). Por
+// isso calculamos aqui, uma vez, para qualquer métrica selecionada.
+function operatorImpact(operator: string): string {
+  switch (operator) {
+    case '<':
+    case '<=':
+      return 'Este critério passa quando o valor observado for menor (ou igual) ao threshold. Threshold mais alto = mais fácil de passar (mais permissivo); mais baixo = mais difícil (mais restritivo).';
+    case '>':
+    case '>=':
+      return 'Este critério passa quando o valor observado for maior (ou igual) ao threshold. Threshold mais alto = mais difícil de passar (mais restritivo); mais baixo = mais fácil (mais permissivo).';
+    case '==':
+      return 'Este critério só passa quando o valor observado for exatamente igual ao threshold - raramente ideal para métricas contínuas como preços ou rácios.';
+    case 'between':
+      return 'Este critério passa quando o valor observado estiver entre o mínimo e o máximo. Intervalo mais largo = mais fácil de passar; mais estreito = mais restritivo.';
+    default:
+      return '';
+  }
+}
+
 const emptyForm: StrategyItemInput = {
   name: '',
   category: '',
@@ -202,6 +223,18 @@ export default function StrategyEditor() {
           {selectedMetricInfo?.description && (
             <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">{selectedMetricInfo.description}</p>
           )}
+          {selectedMetricInfo?.unit && (
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+              <span className="font-medium text-gray-500 dark:text-slate-400">Formato do valor:</span>{' '}
+              {selectedMetricInfo.unit}
+            </p>
+          )}
+          {selectedMetricInfo?.trend && (
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+              <span className="font-medium text-gray-500 dark:text-slate-400">Valor mais alto vs. mais baixo:</span>{' '}
+              {selectedMetricInfo.trend}
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -262,6 +295,9 @@ export default function StrategyEditor() {
             </div>
           )}
         </div>
+        {operatorImpact(form.operator) && (
+          <p className="text-xs text-gray-400 dark:text-slate-500 -mt-2">{operatorImpact(form.operator)}</p>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-1">

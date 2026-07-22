@@ -56,6 +56,8 @@ async def list_metrics(user: User = Depends(get_current_user)):
         {
             "key": key, "kind": spec["kind"], "lookback_days": spec["lookback_days"],
             "description": spec.get("description"),
+            "unit": spec.get("unit"),
+            "trend": spec.get("trend"),
         }
         for key, spec in INDICATORS.items()
     ]
