@@ -58,6 +58,14 @@ async def list_positions(
             .order_by(Position.created_at.asc())
         )
     ).scalars().all()
+    # Garante que cada ação tem preço/fundamentais atuais - sem isto, uma
+    # posição criada diretamente no portfolio (fora da watchlist, onde
+    # add_to_watchlist/agent.evaluate já chamam ensure_fresh) ficava para
+    # sempre sem PriceSnapshot, logo sem Valor/P&L (só "—"). Gratuito na
+    # maior parte dos pedidos: ensure_fresh sai logo se já houver um
+    # snapshot com menos de FRESHNESS_DAYS.
+    for p in positions:
+        await market_data.ensure_fresh(db, p.stock)
     target = user.preferred_currency
     # Uma taxa por moeda distinta presente no portfolio, não uma por posição.
     rates: dict[str, Decimal | None] = {}
@@ -65,10 +73,12 @@ async def list_positions(
         currency = p.stock.currency
         if currency and currency not in rates:
             rates[currency] = await fx.get_rate(db, currency, target)
-    return [
+    result = [
         await _to_dto(db, p, target, rates.get(p.stock.currency) if p.stock.currency else None)
         for p in positions
     ]
+    await db.commit()  # ensure_fresh/get_rate podem ter gravado cache novo
+    return result
 
 
 @router.get("/currency", response_model=PortfolioCurrencyOut)
@@ -140,6 +150,9 @@ async def create_position(
         raise HTTPException(
             status_code=422, detail="Já tens uma posição nesta ação — edita a existente em vez de duplicar."
         )
+    # Sem isto, uma ação nova (ainda sem watchlist/avaliação) ficava sem
+    # nenhum PriceSnapshot até alguém a adicionar também à watchlist.
+    await market_data.ensure_fresh(db, stock)
     position = Position(
         user_id=user.id, stock_id=stock.id, quantity=body.quantity, avg_cost=body.avg_cost,
     )

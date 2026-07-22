@@ -53,6 +53,36 @@ async def test_create_position_creates_stock_if_new(client, user_a):
     assert body["unrealized_pl"] is None
 
 
+async def test_create_position_fetches_price_for_brand_new_stock(client, user_a):
+    """Bug real: criar uma posição para uma ação nova (nunca vista na
+    watchlist, onde add_to_watchlist/agent.evaluate já chamam ensure_fresh)
+    ficava para sempre sem PriceSnapshot - Valor/P&L mostravam '—' para
+    sempre, mesmo passadas semanas, porque nada voltava a tentar buscar o
+    preço. create_position tem de chamar ensure_fresh já na criação."""
+    profile = {"name": "Microsoft Corp.", "currency": "USD", "exchange": "NASDAQ", "finnhubIndustry": "Technology"}
+    quote = {"c": 310.5, "o": 305, "h": 312, "l": 304, "dp": 1.2}
+
+    async def fake_finnhub_get(path, params):
+        if path == "stock/profile2":
+            return profile
+        if path == "quote":
+            return quote
+        if path == "stock/metric":
+            return {}
+        raise AssertionError(f"unexpected path {path}")
+
+    headers = await login(client, "a@test.dev", "password-a")
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
+        resp = await client.post(
+            "/portfolio", json={"ticker": "msft", "quantity": "5", "avg_cost": "300"}, headers=headers,
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert Decimal(body["last_price"]) == Decimal("310.5")
+    assert body["market_value"] is not None
+    assert Decimal(body["market_value"]) == Decimal("5") * Decimal("310.5")
+
+
 async def test_invalid_ticker_rejected(client, user_a):
     from unittest.mock import AsyncMock, patch
 
