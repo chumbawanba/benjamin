@@ -51,6 +51,43 @@ async def test_run_evaluation_on_watchlist(client, db_session, user_a, seeded_st
     assert len(resp.json()) == 1
 
 
+async def test_latest_evaluations_filters_by_template(client, db_session, user_a, seeded_stock):
+    """Bug real: sem template_id, /evaluations/latest devolvia a avaliação
+    mais recente entre TODAS as estratégias por ação, sem indicar qual -
+    não correspondia ao que o utilizador tinha selecionado no Feed. Duas
+    estratégias diferentes sobre a mesma ação devem dar recomendações
+    distintas e recuperáveis em separado."""
+    template_sell = await _setup(db_session, user_a, seeded_stock)  # Value simples -> SELL
+
+    template_buy = StrategyTemplate(user_id=user_a.id, name="Sempre compra")
+    db_session.add(template_buy)
+    await db_session.flush()
+    db_session.add(StrategyItem(
+        template_id=template_buy.id, name="RSI qualquer", metric="RSI_14",
+        operator=">", threshold_value=Decimal("0"), weight=Decimal("1"),
+        direction="buy_signal",
+    ))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post("/evaluations/run", json={"template_id": str(template_sell.id)}, headers=headers)
+    await client.post("/evaluations/run", json={"template_id": str(template_buy.id)}, headers=headers)
+
+    resp_sell = await client.get(f"/evaluations/latest?template_id={template_sell.id}", headers=headers)
+    assert resp_sell.status_code == 200
+    body_sell = resp_sell.json()
+    assert len(body_sell) == 1
+    assert body_sell[0]["strategy_template_id"] == str(template_sell.id)
+    assert body_sell[0]["recommendation"] == "SELL"
+
+    resp_buy = await client.get(f"/evaluations/latest?template_id={template_buy.id}", headers=headers)
+    assert resp_buy.status_code == 200
+    body_buy = resp_buy.json()
+    assert len(body_buy) == 1
+    assert body_buy[0]["strategy_template_id"] == str(template_buy.id)
+    assert body_buy[0]["recommendation"] == "BUY"
+
+
 async def test_run_with_foreign_template(client, db_session, user_a, user_b, seeded_stock):
     template = await _setup(db_session, user_a, seeded_stock)
     headers_b = await login(client, "b@test.dev", "password-b")

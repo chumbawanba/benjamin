@@ -12,17 +12,19 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
   const [running, setRunning] = useState(false);
   const [runningStock, setRunningStock] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [evalsLoading, setEvalsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  // Watchlist + estratégias só mudam por ação do próprio utilizador (nunca
+  // por troca de estratégia selecionada) - separado do carregamento das
+  // avaliações para não recarregar tudo sempre que o <select> muda.
+  async function loadStatic() {
     setLoading(true);
     try {
-      const [evals, wl, tpls] = await Promise.all([
-        api.get<Evaluation[]>('/evaluations/latest'),
+      const [wl, tpls] = await Promise.all([
         api.get<WatchlistItem[]>('/watchlist'),
         api.get<StrategyTemplate[]>('/strategies'),
       ]);
-      setEvaluations(evals);
       setWatchlist(wl);
       setTemplates(tpls);
       setSelectedTemplate((current) => current || tpls.find((t) => t.is_active)?.id || '');
@@ -33,10 +35,34 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  // Avaliação mais recente só da estratégia selecionada - sem template_id, o
+  // endpoint devolvia a mais recente entre TODAS as estratégias por ação, sem
+  // indicar qual, o que não correspondia ao que o <select> dizia estar
+  // selecionado. Repete sempre que a seleção muda.
+  async function loadEvaluations(templateId: string) {
+    if (!templateId) {
+      setEvaluations([]);
+      return;
+    }
+    setEvalsLoading(true);
+    try {
+      const evals = await api.get<Evaluation[]>(`/evaluations/latest?template_id=${encodeURIComponent(templateId)}`);
+      setEvaluations(evals);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Erro ao carregar avaliações');
+    } finally {
+      setEvalsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadStatic();
   }, []);
+
+  useEffect(() => {
+    loadEvaluations(selectedTemplate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTemplate]);
 
   const tickerByStock = useMemo(() => {
     const map = new Map<string, string>();
@@ -56,7 +82,7 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
     setError(null);
     try {
       await api.post('/evaluations/run', { template_id: selectedTemplate });
-      await load();
+      await loadEvaluations(selectedTemplate);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao avaliar');
     } finally {
@@ -70,7 +96,7 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
     setError(null);
     try {
       await api.post('/evaluations/run', { template_id: selectedTemplate, stock_id: stockId });
-      await load();
+      await loadEvaluations(selectedTemplate);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao avaliar');
     } finally {
@@ -106,10 +132,12 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
 
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 
-      {loading ? (
+      {loading || evalsLoading ? (
         <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>
+      ) : !selectedTemplate ? (
+        <p className="text-sm text-gray-500 dark:text-slate-400">Escolhe uma estratégia acima para ver as avaliações.</p>
       ) : evaluations.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-slate-400">Ainda não há avaliações. Corre uma estratégia acima.</p>
+        <p className="text-sm text-gray-500 dark:text-slate-400">Ainda não há avaliações desta estratégia. Corre-a acima.</p>
       ) : (
         <ul className="space-y-2">
           {evaluations.map((ev) => (

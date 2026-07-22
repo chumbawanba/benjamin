@@ -61,19 +61,27 @@ async def run_evaluation(
 
 @router.get("/latest", response_model=list[EvaluationOut])
 async def latest_evaluations(
+    template_id: uuid.UUID | None = None,
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
+    """Avaliação mais recente de cada ação da watchlist. Sem template_id,
+    devolve a mais recente entre TODAS as estratégias por ação (histórico,
+    mantido por compatibilidade) - mas isso mistura estratégias diferentes
+    sem indicação de qual é qual, por isso o Feed (frontend) passa sempre o
+    template_id da estratégia selecionada no seletor."""
     stock_ids = (
         await db.execute(select(WatchlistItem.stock_id).where(WatchlistItem.user_id == user.id))
     ).scalars().all()
     out = []
     for stock_id in stock_ids:
+        query = (
+            select(Evaluation).options(selectinload(Evaluation.details))
+            .where(Evaluation.user_id == user.id, Evaluation.stock_id == stock_id)
+        )
+        if template_id is not None:
+            query = query.where(Evaluation.strategy_template_id == template_id)
         row = (
-            await db.execute(
-                select(Evaluation).options(selectinload(Evaluation.details))
-                .where(Evaluation.user_id == user.id, Evaluation.stock_id == stock_id)
-                .order_by(Evaluation.run_at.desc()).limit(1)
-            )
+            await db.execute(query.order_by(Evaluation.run_at.desc()).limit(1))
         ).scalar_one_or_none()
         if row:
             out.append(row)
