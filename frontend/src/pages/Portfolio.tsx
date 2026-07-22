@@ -1,7 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
-import { Position } from '../api/types';
+import { PortfolioCurrency, Position } from '../api/types';
 import PriceChange from '../components/PriceChange';
+
+// Moedas sempre disponíveis no seletor, mesmo sem nenhuma posição ainda nelas -
+// cobre o caso comum (EUR/USD) sem forçar o utilizador a já ter uma posição
+// nessa moeda. Outras moedas presentes nas posições (ex: GBP) são adicionadas
+// dinamicamente em `currencyOptions`.
+const COMMON_CURRENCIES = ['EUR', 'USD', 'GBP'];
 
 function toNum(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -26,6 +32,9 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [currency, setCurrency] = useState<string>('EUR');
+  const [currencySaving, setCurrencySaving] = useState(false);
+
   const [ticker, setTicker] = useState('');
   const [quantity, setQuantity] = useState('');
   const [avgCost, setAvgCost] = useState('');
@@ -41,8 +50,12 @@ export default function Portfolio() {
   async function load() {
     setLoading(true);
     try {
-      const data = await api.get<Position[]>('/portfolio');
+      const [data, curr] = await Promise.all([
+        api.get<Position[]>('/portfolio'),
+        api.get<PortfolioCurrency>('/portfolio/currency'),
+      ]);
       setPositions(data);
+      setCurrency(curr.currency);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar portfolio');
     } finally {
@@ -54,23 +67,47 @@ export default function Portfolio() {
     load();
   }, []);
 
+  async function handleCurrencyChange(next: string) {
+    setCurrencySaving(true);
+    try {
+      await api.put<PortfolioCurrency>('/portfolio/currency', { currency: next });
+      setCurrency(next);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Erro ao mudar de moeda');
+    } finally {
+      setCurrencySaving(false);
+    }
+  }
+
+  const currencyOptions = useMemo(() => {
+    const fromPositions = positions.map((p) => p.stock.currency).filter((c): c is string => !!c);
+    return Array.from(new Set([...COMMON_CURRENCIES, ...fromPositions, currency]));
+  }, [positions, currency]);
+
   const totals = useMemo(() => {
     let costTotal = 0;
     let valueKnown = 0;
     let costOfKnown = 0;
     for (const p of positions) {
-      costTotal += toNum(p.cost_total) ?? 0;
-      const mv = toNum(p.market_value);
+      // Usa o valor convertido quando disponível (posições em moedas diferentes
+      // da preferida) - cai para o valor nativo só quando a moeda já coincide
+      // (cost_total_converted vem null nesse caso, ver routers/portfolio.py).
+      const cost = toNum(p.cost_total_converted) ?? toNum(p.cost_total) ?? 0;
+      costTotal += cost;
+      const mv = toNum(p.market_value_converted) ?? toNum(p.market_value);
       if (mv !== null) {
         valueKnown += mv;
-        costOfKnown += toNum(p.cost_total) ?? 0;
+        costOfKnown += cost;
       }
     }
     const pl = valueKnown - costOfKnown;
     const plPct = costOfKnown !== 0 ? (pl / costOfKnown) * 100 : null;
-    const hasUnknown = positions.some((p) => toNum(p.market_value) === null);
+    const hasUnknown = positions.some(
+      (p) => toNum(p.market_value) === null || (p.stock.currency !== currency && toNum(p.market_value_converted) === null),
+    );
     return { costTotal, valueKnown, pl, plPct, hasUnknown, hasAny: positions.length > 0 };
-  }, [positions]);
+  }, [positions, currency]);
 
   async function handleAdd(e: FormEvent) {
     e.preventDefault();
@@ -123,31 +160,48 @@ export default function Portfolio() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Portfolio</h1>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">Portfolio</h1>
+        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+          Moeda
+          <select
+            value={currency}
+            disabled={currencySaving}
+            onChange={(e) => void handleCurrencyChange(e.target.value)}
+            className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1 text-xs disabled:opacity-50"
+          >
+            {currencyOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       {totals.hasAny && (
         <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-3 gap-2 text-center">
           <div>
             <p className="text-xs text-gray-400 dark:text-slate-500">Custo total</p>
-            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{money(totals.costTotal)}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">{money(totals.costTotal, currency)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 dark:text-slate-500">Valor de mercado</p>
             <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
-              {money(totals.valueKnown)}
+              {money(totals.valueKnown, currency)}
               {totals.hasUnknown && '*'}
             </p>
           </div>
           <div>
             <p className="text-xs text-gray-400 dark:text-slate-500">P&L não realizado</p>
             <p className={`text-sm font-semibold ${plColorClass(totals.pl)}`}>
-              {money(totals.pl)}
+              {money(totals.pl, currency)}
               {totals.plPct !== null && ` (${totals.plPct > 0 ? '+' : ''}${totals.plPct.toFixed(2)}%)`}
             </p>
           </div>
           {totals.hasUnknown && (
             <p className="col-span-3 text-xs text-gray-400 dark:text-slate-500 mt-1">
-              * exclui posições sem preço de mercado conhecido ainda
+              * exclui posições sem preço de mercado ou câmbio conhecido ainda
             </p>
           )}
         </div>
@@ -205,6 +259,11 @@ export default function Portfolio() {
             const plNum = toNum(p.unrealized_pl);
             const plPctNum = toNum(p.unrealized_pl_pct);
             const editing = editingId === p.id;
+            // Só mostra o "≈ convertido" quando a moeda da ação é diferente da
+            // preferida - evita repetir o mesmo valor duas vezes sem necessidade.
+            const needsConversion = p.stock.currency !== currency;
+            const marketValueConvertedNum = toNum(p.market_value_converted);
+            const plConvertedNum = toNum(p.unrealized_pl_converted);
 
             return (
               <li
@@ -266,6 +325,11 @@ export default function Portfolio() {
                     <div>
                       <p className="text-xs text-gray-400 dark:text-slate-500">Valor</p>
                       <p className="text-sm text-gray-900 dark:text-slate-100">{money(marketValueNum, p.stock.currency)}</p>
+                      {needsConversion && marketValueConvertedNum !== null && (
+                        <p className="text-xs text-gray-400 dark:text-slate-500">
+                          ≈ {money(marketValueConvertedNum, currency)}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className="text-xs text-gray-400 dark:text-slate-500">P&L</p>
@@ -278,6 +342,9 @@ export default function Portfolio() {
                           </span>
                         )}
                       </p>
+                      {needsConversion && plConvertedNum !== null && (
+                        <p className="text-xs text-gray-400 dark:text-slate-500">≈ {money(plConvertedNum, currency)}</p>
+                      )}
                     </div>
                   </div>
                 )}

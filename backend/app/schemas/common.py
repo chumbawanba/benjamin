@@ -200,6 +200,21 @@ class PositionOut(BaseModel):
     unrealized_pl: Decimal | None
     unrealized_pl_pct: Decimal | None
     updated_at: datetime
+    # Valores convertidos para User.preferred_currency (ver app/services/fx.py) -
+    # None se a taxa de câmbio não estiver disponível. display_currency é sempre
+    # a moeda preferida atual, mesmo quando a conversão falha.
+    display_currency: str
+    cost_total_converted: Decimal | None
+    market_value_converted: Decimal | None
+    unrealized_pl_converted: Decimal | None
+
+
+class PortfolioCurrencyOut(BaseModel):
+    currency: str
+
+
+class PortfolioCurrencyIn(BaseModel):
+    currency: str = Field(min_length=3, max_length=3)
 
 
 # ---- Strategies ----

@@ -221,4 +221,12 @@ export interface Position {
   unrealized_pl: number | string | null;
   unrealized_pl_pct: number | string | null;
   updated_at: string;
+  display_currency: string;
+  cost_total_converted: number | string | null;
+  market_value_converted: number | string | null;
+  unrealized_pl_converted: number | string | null;
+}
+
+export interface PortfolioCurrency {
+  currency: string;
 }

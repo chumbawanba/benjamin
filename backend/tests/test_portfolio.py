@@ -1,8 +1,20 @@
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from tests.conftest import login, mock_market_data_valid
 
 from app.models import Position
+
+
+@pytest.fixture(autouse=True)
+def _mock_fx_rate():
+    """seeded_stock é USD e User.preferred_currency é EUR por defeito - sem
+    isto, todos os testes deste ficheiro chamariam a Twelve Data a sério (ver
+    CLAUDE.md: nunca chamar Finnhub/Twelve Data diretamente nos testes)."""
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(return_value={"rate": "0.9"})):
+        yield
 
 
 async def test_create_and_list_position(client, user_a, seeded_stock):
@@ -104,6 +116,62 @@ async def test_position_isolated_between_users(client, user_a, user_b, seeded_st
     assert resp_edit.status_code == 404
     resp_delete = await client.delete(f"/portfolio/{position_id}", headers=headers_b)
     assert resp_delete.status_code == 404
+
+
+async def test_position_converted_to_preferred_currency(client, user_a, seeded_stock):
+    """seeded_stock é USD; User.preferred_currency é EUR por defeito (ver
+    models/user.py). O mock global deste ficheiro devolve sempre rate=0.9."""
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.post(
+        "/portfolio", json={"ticker": "AAPL", "quantity": "10", "avg_cost": "150"}, headers=headers,
+    )
+    body = resp.json()
+    assert body["display_currency"] == "EUR"
+    assert Decimal(body["cost_total_converted"]) == Decimal(body["cost_total"]) * Decimal("0.9")
+    assert Decimal(body["market_value_converted"]) == Decimal(body["market_value"]) * Decimal("0.9")
+
+
+async def test_position_same_currency_no_conversion_call(client, user_a, seeded_stock):
+    """Se a moeda preferida já é a da ação, get_rate devolve 1 sem chamar a
+    Twelve Data - confirmamos isso sobrepondo o mock do ficheiro (que só
+    devolveria 0.9 se fosse chamado) para garantir que NÃO é chamado."""
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.put("/portfolio/currency", json={"currency": "USD"}, headers=headers)
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=Exception("não devia ser chamado"))):
+        resp = await client.post(
+            "/portfolio", json={"ticker": "AAPL", "quantity": "10", "avg_cost": "150"}, headers=headers,
+        )
+    body = resp.json()
+    assert body["display_currency"] == "USD"
+    assert Decimal(body["cost_total_converted"]) == Decimal(body["cost_total"])
+
+
+async def test_get_and_set_portfolio_currency(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get("/portfolio/currency", headers=headers)
+    assert resp.json() == {"currency": "EUR"}
+
+    resp2 = await client.put("/portfolio/currency", json={"currency": "usd"}, headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json() == {"currency": "USD"}
+
+    resp3 = await client.get("/portfolio/currency", headers=headers)
+    assert resp3.json() == {"currency": "USD"}
+
+
+async def test_portfolio_currency_isolated_between_users(client, user_a, user_b):
+    headers_a = await login(client, "a@test.dev", "password-a")
+    headers_b = await login(client, "b@test.dev", "password-b")
+
+    await client.put("/portfolio/currency", json={"currency": "USD"}, headers=headers_a)
+
+    resp_b = await client.get("/portfolio/currency", headers=headers_b)
+    assert resp_b.json() == {"currency": "EUR"}
+
+
+async def test_set_portfolio_currency_requires_auth(client):
+    resp = await client.put("/portfolio/currency", json={"currency": "USD"})
+    assert resp.status_code == 401
 
 
 async def test_cascade_delete_position_with_user(client, db_session, user_a, seeded_stock):

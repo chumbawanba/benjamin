@@ -27,3 +27,7 @@ class User(Base):
     # Prompt de sistema personalizado (opcional) para o resumo do analista.
     # None = usa DEFAULT_SYSTEM_PROMPT (analyst.py). Editável via GET/PUT /analyst/prompt.
     analyst_prompt: Mapped[str | None] = mapped_column(Text)
+    # Moeda em que o portfolio é apresentado (conversão via app/services/fx.py) -
+    # útil para quem tem posições em várias moedas (ex: ações US em USD e europeias
+    # em EUR). Editável via GET/PUT /portfolio/currency.
+    preferred_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR", server_default="EUR")

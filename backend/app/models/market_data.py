@@ -46,3 +46,17 @@ class IndicatorValue(Base):
     indicator_name: Mapped[str] = mapped_column(String(100), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     value: Mapped[Decimal | None] = mapped_column(Numeric(14, 6))
+
+
+class FxRateSnapshot(Base):
+    """Cache diário de taxas de câmbio (ver app/services/fx.py) - usado para
+    converter posições do portfolio (em moedas diferentes, ex: USD e EUR) para
+    a moeda preferida do utilizador (User.preferred_currency)."""
+    __tablename__ = "fx_rate_snapshots"
+    __table_args__ = (UniqueConstraint("base_currency", "quote_currency", "date"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    base_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    quote_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    rate: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
