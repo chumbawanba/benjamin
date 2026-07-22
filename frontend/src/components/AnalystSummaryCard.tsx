@@ -155,8 +155,12 @@ export default function AnalystSummaryCard() {
       ) : data?.summary ? (
         <>
           <p className="text-sm text-gray-700 dark:text-slate-300 whitespace-pre-line">{data.summary}</p>
+          <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2 leading-snug">
+            Gerado por IA — pode conter erros. Não é aconselhamento financeiro; a decisão de
+            investir é sempre tua.
+          </p>
           {data.generated_at && (
-            <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
               Gerado em {formatDate(data.generated_at)}
             </p>
           )}

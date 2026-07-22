@@ -22,7 +22,7 @@ export default function AskBenjaminPanel({ onClose }: Props) {
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex flex-col">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Perguntar ao Benjamin</h2>
         {onClose && (
           <button onClick={onClose} className="text-xs font-medium text-gray-400 dark:text-slate-500">
@@ -30,6 +30,13 @@ export default function AskBenjaminPanel({ onClose }: Props) {
           </button>
         )}
       </div>
+      {/* Sempre visível, não só quando há mensagens - o utilizador deve ver isto antes
+          de ler qualquer resposta gerada, não depois. Ver pedido: deixar claro que é IA,
+          pode ter erros, não é aconselhamento, e a decisão é sempre do investidor. */}
+      <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-3 leading-snug">
+        Respostas geradas por IA — podem conter erros. Não é aconselhamento financeiro; a
+        decisão de investir é sempre tua.
+      </p>
 
       <div className="flex-1 overflow-y-auto max-h-[55vh] space-y-2 mb-3 min-h-[80px]">
         {messages.length === 0 ? (
