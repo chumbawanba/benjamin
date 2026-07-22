@@ -54,10 +54,25 @@ ASK_SYSTEM_PROMPT = (
     "passou ou falhou, contribuição para o score). Respondes de forma direta e "
     "curta (poucas frases, sem bullet points nem markdown) à pergunta do "
     "utilizador - por exemplo, para explicar porque uma ação tem ou não sinal de "
-    "compra/venda, aponta os critérios concretos que passaram ou falharam. Se a "
-    "pergunta não tiver relação com os dados fornecidos, di-lo em vez de "
-    "inventar. Não dás conselhos de investimento diretos - descreves o que os "
-    "dados mostram, deixando a decisão para o utilizador."
+    "compra/venda, aponta os critérios concretos que passaram ou falharam; para "
+    "perguntas sobre lucros ou posição financeira de uma ação (crescimento de "
+    "receita, margem, ROE, rácio corrente, dívida/capital, etc.), usa os "
+    "fundamentais fornecidos no contexto. "
+    "Também tens um papel educativo: podes explicar conceitos, métricas e "
+    "estratégias de investimento em geral - incluindo a abordagem de Benjamin "
+    "Graham (value investing, margem de segurança, P/E, dívida/capital, etc.) e "
+    "outras abordagens conhecidas (growth investing, dividend investing, "
+    "indexação, etc.) - mesmo quando a pergunta não tem relação direta com os "
+    "dados concretos do utilizador. Nestas respostas educativas, é claro que "
+    "estás a explicar um conceito ou estratégia em geral, não a fazer uma "
+    "recomendação sobre o portfólio dele. "
+    "O que não podes fazer é inventar factos concretos que não estão nos dados "
+    "fornecidos - por exemplo, se perguntarem que mercados estão a crescer agora "
+    "e os dados de mercado geral fornecidos não cobrirem isso, di-lo em vez de "
+    "inventar números ou eventos. Não dás conselhos de investimento diretos - "
+    "nem no contexto do portfólio do utilizador, nem em respostas educativas -  "
+    "descreves o que os dados ou a teoria mostram, deixando a decisão para o "
+    "utilizador."
 )
 
 MAX_QUESTION_LENGTH = 1000  # espelha AnalystAskIn.question em schemas/common.py
@@ -77,10 +92,15 @@ def effective_prompt(user: User) -> str:
 
 
 def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:
-    """Linha compacta com os 5 fundamentais (só os que existem) - mesmos campos
-    já usados nas estratégias (PE_RATIO, DIVIDEND_YIELD, EPS, DEBT_TO_EQUITY,
-    MARKET_CAP), formatados como no registry de indicadores (indicators_core.py):
-    dividend_yield é fração (0.02 = 2%), market_cap em USD (mostrado em B$)."""
+    """Linha compacta com os fundamentais disponíveis (só os que existem) -
+    mesmos campos já usados nas estratégias (PE_RATIO, DIVIDEND_YIELD, EPS,
+    DEBT_TO_EQUITY, MARKET_CAP) mais métricas de "posição financeira"
+    (crescimento de receita, margem líquida, ROE, rácio corrente) - permitem
+    ao Benjamin responder a perguntas sobre lucros/saúde financeira de uma
+    ação, não só os critérios de estratégia. Formatação como no registry de
+    indicadores (indicators_core.py): dividend_yield é fração (0.02 = 2%),
+    market_cap em USD (mostrado em B$); os quatro novos já vêm em percentagem/
+    rácio direto (ver market_data.refresh_fundamentals)."""
     if row is None:
         return "sem fundamentais"
     parts = []
@@ -94,6 +114,14 @@ def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:
         parts.append(f"dívida/capital {row.debt_to_equity}")
     if row.market_cap is not None:
         parts.append(f"cap. mercado {row.market_cap / 1_000_000_000:.1f}B$")
+    if row.revenue_growth is not None:
+        parts.append(f"crescimento receita {row.revenue_growth}%")
+    if row.net_margin is not None:
+        parts.append(f"margem líquida {row.net_margin}%")
+    if row.roe is not None:
+        parts.append(f"ROE {row.roe}%")
+    if row.current_ratio is not None:
+        parts.append(f"rácio corrente {row.current_ratio}")
     return ", ".join(parts) if parts else "sem fundamentais"
 
 

@@ -19,6 +19,11 @@ function formatDecimal(value: number | string | null | undefined, digits = 2): s
   return n === null ? '—' : n.toFixed(digits);
 }
 
+function formatPercentField(value: number | string | null | undefined, digits = 2): string {
+  const n = toNum(value);
+  return n === null ? '—' : `${n.toFixed(digits)}%`;
+}
+
 function formatIndicatorValue(key: string, value: number | null): string {
   const n = toNum(value);
   if (n === null) return '—';
@@ -36,6 +41,10 @@ const FUNDAMENTALS_DESCRIPTIONS: Record<string, string> = {
   EPS: 'Lucro por ação — lucro líquido da empresa a dividir pelo número total de ações.',
   'Debt/Equity': 'Dívida total a dividir pelo capital próprio. Quanto mais alto, mais a empresa depende de dívida para se financiar.',
   'Dividend Yield': 'Dividendo anual a dividir pelo preço da ação, em percentagem — quanto a ação "paga" em dividendos por ano.',
+  'Crescimento receita': 'Variação da receita (vendas) face ao ano anterior, em percentagem. Mostra se o negócio está a crescer.',
+  'Margem líquida': 'Lucro líquido a dividir pela receita, em percentagem. Quanto mais alto, mais a empresa retém de cada euro/dólar vendido.',
+  ROE: 'Return on Equity — lucro líquido a dividir pelo capital próprio, em percentagem. Mede quão eficiente a empresa é a gerar lucro com o dinheiro dos acionistas.',
+  'Rácio corrente': 'Ativo circulante a dividir pelo passivo circulante. Acima de 1 sugere que a empresa consegue cobrir as dívidas de curto prazo.',
 };
 
 function formatCriterionValue(criterion: { threshold_value: number | null; threshold_value_max: number | null; operator: string }): string {
@@ -156,6 +165,22 @@ export default function StockDetail() {
                   return y === null ? '—' : `${(y * 100).toFixed(2)}%`;
                 })()}
               </p>
+            </div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['Crescimento receita']}>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Crescimento receita</p>
+              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.revenue_growth)}</p>
+            </div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['Margem líquida']}>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Margem líquida</p>
+              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.net_margin)}</p>
+            </div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS.ROE}>
+              <p className="text-xs text-gray-500 dark:text-slate-400">ROE</p>
+              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.roe)}</p>
+            </div>
+            <div title={FUNDAMENTALS_DESCRIPTIONS['Rácio corrente']}>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Rácio corrente</p>
+              <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.current_ratio)}</p>
             </div>
           </div>
         </>

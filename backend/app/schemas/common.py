@@ -101,6 +101,10 @@ class FundamentalsOut(BaseModel):
     debt_to_equity: Decimal | None
     dividend_yield: Decimal | None
     market_cap: int | None
+    revenue_growth: Decimal | None
+    net_margin: Decimal | None
+    roe: Decimal | None
+    current_ratio: Decimal | None
 
     model_config = {"from_attributes": True}
 

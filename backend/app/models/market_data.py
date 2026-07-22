@@ -35,6 +35,14 @@ class FundamentalsSnapshot(Base):
     debt_to_equity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     dividend_yield: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
     market_cap: Mapped[int | None] = mapped_column(BigInteger)
+    # Métricas adicionais de "posição financeira" (ver app/services/analyst.py e
+    # HANDOFF.md) - revenue_growth/net_margin/roe em percentagem (ex: 12.34 =
+    # 12.34%), current_ratio é um rácio simples (ativo circulante / passivo
+    # circulante, ex: 1.5). Todos opcionais - Finnhub nem sempre os devolve.
+    revenue_growth: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    net_margin: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    roe: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    current_ratio: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
 
 class IndicatorValue(Base):

@@ -88,6 +88,39 @@ async def test_get_price_change_no_snapshots(db_session):
     assert change_pct is None
 
 
+async def test_refresh_fundamentals_maps_extended_metrics(db_session):
+    stock = Stock(ticker="AAPL", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+
+    metric_payload = {
+        "metric": {
+            "peTTM": 28.5,
+            "epsTTM": 6.1,
+            "totalDebt/totalEquityAnnual": 1.8,
+            "currentDividendYieldTTM": 0.5,  # -> 0.005 guardado
+            "marketCapitalization": 3_000_000,  # milhões -> *1e6
+            "revenueGrowthTTMYoy": 8.2,
+            "netProfitMarginTTM": 25.3,
+            "roeTTM": 147.9,
+            "currentRatioAnnual": 1.05,
+        }
+    }
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=metric_payload)):
+        await market_data.refresh_fundamentals(db_session, stock)
+
+    from app.models import FundamentalsSnapshot
+    from sqlalchemy import select
+    row = (
+        await db_session.execute(select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id))
+    ).scalar_one()
+    assert row.pe_ratio == Decimal("28.5")
+    assert row.revenue_growth == Decimal("8.2")
+    assert row.net_margin == Decimal("25.3")
+    assert row.roe == Decimal("147.9")
+    assert row.current_ratio == Decimal("1.05")
+
+
 async def test_get_market_pulse_happy_path():
     quote = {"c": 500.0, "dp": 1.23}
     news = [{"headline": "Mercado sobe", "source": "Reuters", "url": "http://x"}, {"headline": None}]
@@ -102,7 +135,7 @@ async def test_get_market_pulse_happy_path():
     with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
         pulse = await market_data.get_market_pulse()
 
-    assert len(pulse["indices"]) == 3  # SPY, QQQ, DIA
+    assert len(pulse["indices"]) == len(market_data.MARKET_INDEX_PROXIES)
     assert all(idx["change_pct"] == 1.23 for idx in pulse["indices"])
     # a notícia sem headline é descartada
     assert pulse["news"] == [{"headline": "Mercado sobe", "source": "Reuters", "url": "http://x"}]
@@ -112,6 +145,6 @@ async def test_get_market_pulse_survives_finnhub_failure():
     with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=Exception("boom"))):
         pulse = await market_data.get_market_pulse()  # não deve lançar
 
-    assert len(pulse["indices"]) == 3
+    assert len(pulse["indices"]) == len(market_data.MARKET_INDEX_PROXIES)
     assert all(idx["change_pct"] is None for idx in pulse["indices"])
     assert pulse["news"] == []

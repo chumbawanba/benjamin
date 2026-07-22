@@ -123,6 +123,10 @@ export interface Fundamentals {
   debt_to_equity: number | null;
   dividend_yield: number | null;
   market_cap: number | null;
+  revenue_growth: number | string | null;
+  net_margin: number | string | null;
+  roe: number | string | null;
+  current_ratio: number | string | null;
 }
 
 export interface EvaluationCriterion {

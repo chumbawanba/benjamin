@@ -81,19 +81,27 @@ async def get_company_news(ticker: str, days: int = 7, limit: int = 5) -> list[d
 
 
 MARKET_INDEX_PROXIES = [
-    ("SPY", "S&P 500"),
-    ("QQQ", "Nasdaq 100"),
-    ("DIA", "Dow Jones"),
+    ("SPY", "S&P 500 (EUA, mercado amplo)"),
+    ("QQQ", "Nasdaq 100 (tecnologia EUA)"),
+    ("IWM", "Russell 2000 (small caps EUA)"),
+    ("VGK", "Europa"),
+    ("EEM", "Mercados emergentes"),
+    ("XLK", "Setor tecnológico"),
+    ("XLF", "Setor financeiro"),
+    ("XLE", "Setor energético"),
+    ("XLV", "Setor saúde"),
 ]
 
 
 async def get_market_pulse(news_limit: int = 8) -> dict:
-    """Visão geral do mercado: variação % de hoje de 3 ETFs-proxy dos
-    principais índices (SPY/QQQ/DIA, via Finnhub /quote) + notícias gerais
-    recentes (Finnhub /news?category=general). Usado pelo resumo do analista
-    (analyst.py). Nunca lança exceção — degrada graciosamente (mesmo padrão
-    de search_tickers/get_company_news), já que isto é só contexto extra
-    para o LLM, não deve impedir a geração do resumo."""
+    """Visão geral do mercado: variação % de hoje de ETFs-proxy de índices,
+    regiões e setores (ver MARKET_INDEX_PROXIES, via Finnhub /quote) + notícias
+    gerais recentes (Finnhub /news?category=general). Usado pelo resumo e pelo
+    chat do analista (analyst.py) - a variedade de regiões/setores permite
+    responder a perguntas tipo "que mercados estão a crescer", não só EUA.
+    Nunca lança exceção — degrada graciosamente (mesmo padrão de
+    search_tickers/get_company_news), já que isto é só contexto extra para o
+    LLM, não deve impedir a geração do resumo."""
     indices = []
     for symbol, label in MARKET_INDEX_PROXIES:
         change_pct = None
@@ -325,6 +333,12 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
         # Finnhub devolve o yield em percentagem (ex: 0.65 = 0.65%); guardamos como fração.
         dividend_yield=_dec(dividend_yield / 100 if dividend_yield is not None else None),
         market_cap=int(market_cap * 1_000_000) if market_cap else None,
+        # Estes quatro já vêm em percentagem/rácio direto da Finnhub, sem
+        # conversão (ex: revenueGrowthTTMYoy=12.3 significa 12.3%).
+        revenue_growth=_dec(metric.get("revenueGrowthTTMYoy") or metric.get("revenueGrowth3Y")),
+        net_margin=_dec(metric.get("netProfitMarginTTM") or metric.get("netProfitMarginAnnual")),
+        roe=_dec(metric.get("roeTTM") or metric.get("roeAnnual")),
+        current_ratio=_dec(metric.get("currentRatioAnnual") or metric.get("currentRatioQuarterly")),
     ))
     await db.flush()
 
