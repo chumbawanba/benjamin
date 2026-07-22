@@ -196,20 +196,31 @@
       <p class="text-navy-500 mb-6">
         Deixa o teu email e avisamos quando houver novidades — sem spam.
       </p>
-      <form id="waitlist-form" class="flex flex-col sm:flex-row gap-3">
-        <input
-          id="waitlist-email"
-          type="email"
-          required
-          placeholder="o-teu-email@exemplo.com"
-          class="flex-1 border border-navy-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-navy-300"
-        />
-        <button
-          type="submit"
-          class="bg-navy-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-navy-700 transition-colors whitespace-nowrap"
-        >
-          Avisa-me
-        </button>
+      <form id="waitlist-form" class="flex flex-col gap-3">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            id="waitlist-email"
+            type="email"
+            required
+            placeholder="o-teu-email@exemplo.com"
+            class="flex-1 border border-navy-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-navy-300"
+          />
+          <button
+            type="submit"
+            class="bg-navy-900 text-white font-semibold px-6 py-3 rounded-lg hover:bg-navy-700 transition-colors whitespace-nowrap"
+          >
+            Avisa-me
+          </button>
+        </div>
+        <label class="flex items-start gap-2 text-xs text-navy-500 text-left">
+          <input id="waitlist-terms" type="checkbox" required class="mt-0.5 shrink-0" />
+          <span>
+            Li e aceito a
+            <a href="/privacy-policy.html" class="underline hover:text-navy-700">Política de Privacidade</a>
+            e a
+            <a href="/cookie-policy.html" class="underline hover:text-navy-700">Política de Cookies</a>.
+          </span>
+        </label>
       </form>
       <p id="waitlist-message" class="mt-3 text-sm"></p>
     </div>
@@ -222,9 +233,11 @@
         <img src="icon-192.png" alt="" class="w-5 h-5 rounded-full" />
         <span>© 2026 Benjamin</span>
       </div>
-      <div class="flex items-center gap-6">
+      <div class="flex items-center gap-6 flex-wrap justify-center">
         <a href="https://beta.appbenjamin.com/register" class="hover:text-navy-700">Beta</a>
         <a href="/risk-warning.html" class="hover:text-navy-700">Aviso de Risco</a>
+        <a href="/privacy-policy.html" class="hover:text-navy-700">Privacidade</a>
+        <a href="/cookie-policy.html" class="hover:text-navy-700">Cookies</a>
         <a href="mailto:contact@appbenjamin.com" class="hover:text-navy-700">Contacto</a>
       </div>
     </div>
@@ -233,6 +246,7 @@
   <script>
     const form = document.getElementById('waitlist-form');
     const emailInput = document.getElementById('waitlist-email');
+    const termsInput = document.getElementById('waitlist-terms');
     const message = document.getElementById('waitlist-message');
 
     form.addEventListener('submit', async (e) => {
@@ -243,7 +257,7 @@
         const resp = await fetch('https://beta.appbenjamin.com/api/v1/waitlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: emailInput.value }),
+          body: JSON.stringify({ email: emailInput.value, accepted_terms: termsInput.checked }),
         });
         if (!resp.ok) throw new Error('request failed');
         message.textContent = 'Feito — avisamos assim que houver novidades.';

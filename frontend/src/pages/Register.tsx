@@ -9,6 +9,7 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -17,7 +18,7 @@ export default function Register() {
     setError(null);
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, email, password, acceptedTerms);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao criar conta');
@@ -80,6 +81,27 @@ export default function Register() {
             className="w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-3 py-2 mb-1 text-sm"
           />
           <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">Mínimo 8 caracteres.</p>
+
+          <label className="flex items-start gap-2 text-xs text-gray-500 dark:text-slate-400 mb-4">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              required
+              className="mt-0.5 shrink-0"
+            />
+            <span>
+              Li e aceito a{' '}
+              <a href="https://appbenjamin.com/privacy-policy.html" className="text-navy-600 dark:text-navy-400 underline">
+                Política de Privacidade
+              </a>{' '}
+              e a{' '}
+              <a href="https://appbenjamin.com/cookie-policy.html" className="text-navy-600 dark:text-navy-400 underline">
+                Política de Cookies
+              </a>
+              .
+            </span>
+          </label>
 
           {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,10 +17,17 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def register(body: RegisterIn, db: AsyncSession = Depends(get_db)):
     if not settings.allow_registration:
         raise HTTPException(status_code=403, detail="Registo desativado")
+    if not body.accepted_terms:
+        raise HTTPException(
+            status_code=422, detail="É necessário aceitar a Política de Privacidade e de Cookies"
+        )
     exists = (await db.execute(select(User).where(User.email == body.email))).scalar_one_or_none()
     if exists:
         raise HTTPException(status_code=422, detail="Email já registado")
-    user = User(email=body.email, name=body.name, password_hash=hash_password(body.password))
+    user = User(
+        email=body.email, name=body.name, password_hash=hash_password(body.password),
+        accepted_terms_at=datetime.now(timezone.utc),
+    )
     db.add(user)
     await db.commit()
     return TokenOut(access_token=create_access_token(user.id))

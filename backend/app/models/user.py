@@ -31,3 +31,8 @@ class User(Base):
     # útil para quem tem posições em várias moedas (ex: ações US em USD e europeias
     # em EUR). Editável via GET/PUT /portfolio/currency.
     preferred_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EUR", server_default="EUR")
+    # Data/hora em que aceitou a Política de Privacidade e de Cookies no registo
+    # (obrigatório desde então - ver RegisterIn/auth.py). Nullable porque
+    # utilizadores criados antes desta funcionalidade não têm este campo
+    # preenchido retroativamente.
+    accepted_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

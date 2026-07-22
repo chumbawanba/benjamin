@@ -4,7 +4,7 @@ import { api, getToken, setToken } from '../api/client';
 interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, acceptedTerms: boolean) => Promise<void>;
   logout: () => void;
 }
 
@@ -19,8 +19,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(true);
   }, []);
 
-  const register = useCallback(async (name: string, email: string, password: string) => {
-    const res = await api.post<{ access_token: string }>('/auth/register', { name, email, password });
+  const register = useCallback(async (name: string, email: string, password: string, acceptedTerms: boolean) => {
+    const res = await api.post<{ access_token: string }>('/auth/register', {
+      name, email, password, accepted_terms: acceptedTerms,
+    });
     setToken(res.access_token);
     setIsAuthenticated(true);
   }, []);

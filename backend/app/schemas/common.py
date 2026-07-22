@@ -15,6 +15,9 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: str | None = None
+    # Obrigatório (validado no router, não aqui, para dar uma mensagem clara -
+    # ver auth.py) - false ou omitido dão 422 antes de criar a conta.
+    accepted_terms: bool = False
 
 
 class LoginIn(BaseModel):
@@ -30,6 +33,8 @@ class TokenOut(BaseModel):
 # ---- Waitlist ----
 class WaitlistIn(BaseModel):
     email: EmailStr
+    # Obrigatório (validado no router - ver routers/waitlist.py), mesmo padrão de RegisterIn.
+    accepted_terms: bool = False
 
 
 # ---- Watchlist ----

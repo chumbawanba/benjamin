@@ -20,3 +20,7 @@ class WaitlistEntry(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Data/hora em que aceitou a Política de Privacidade e de Cookies ao
+    # inscrever-se - obrigatório desde então (ver WaitlistIn/waitlist.py).
+    # Nullable porque entradas anteriores a esta funcionalidade não o têm.
+    accepted_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
