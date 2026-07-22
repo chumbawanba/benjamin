@@ -87,20 +87,21 @@ export default function AnalystSummaryCard() {
   return (
     <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Resumo do Benjamin</h2>
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300">Report do Benjamin</h2>
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => (editorOpen ? setEditorOpen(false) : openEditor())}
             className="text-xs font-medium text-gray-500 dark:text-slate-400"
           >
-            {editorOpen ? 'Fechar' : 'Editar prompt'}
+            {editorOpen ? 'Fechar' : 'Editar report'}
           </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing || loading}
+            title={data?.summary ? 'Atualizar' : 'Gerar'}
             className="text-xs font-medium text-navy-600 dark:text-navy-400 disabled:opacity-50"
           >
-            {refreshing ? 'A gerar…' : data?.summary ? 'Atualizar análise' : 'Gerar análise'}
+            {refreshing ? '…' : data?.summary ? '↻' : 'Gerar'}
           </button>
         </div>
       </div>
@@ -156,18 +157,13 @@ export default function AnalystSummaryCard() {
         <>
           <p className="text-sm text-gray-700 dark:text-slate-300 whitespace-pre-line">{data.summary}</p>
           <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2 leading-snug">
-            Gerado por IA — pode conter erros. Não é aconselhamento financeiro; a decisão de
-            investir é sempre tua.
+            Gerado por IA{data.generated_at ? ` em ${formatDate(data.generated_at)}` : ''} — pode conter erros. Não é
+            aconselhamento financeiro; a decisão de investir é sempre tua.
           </p>
-          {data.generated_at && (
-            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
-              Gerado em {formatDate(data.generated_at)}
-            </p>
-          )}
         </>
       ) : (
         <p className="text-sm text-gray-400 dark:text-slate-500">
-          Ainda não há um resumo. Clica em "Gerar análise" para pedir um resumo ao Benjamin com base na tua watchlist
+          Ainda não há um report. Clica em "Gerar" para pedir um report ao Benjamin com base na tua watchlist
           e no mercado geral.
         </p>
       )}

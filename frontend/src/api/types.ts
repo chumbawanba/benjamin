@@ -5,6 +5,7 @@ export interface Stock {
   ticker: string;
   name: string | null;
   currency: string | null;
+  sector: string | null;
 }
 
 export interface EvaluationSummary {

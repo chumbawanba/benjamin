@@ -45,6 +45,7 @@ class StockOut(BaseModel):
     ticker: str
     name: str | None
     currency: str | None
+    sector: str | None = None
 
     model_config = {"from_attributes": True}
 

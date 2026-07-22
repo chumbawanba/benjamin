@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { PortfolioCurrency, Position } from '../api/types';
+import PortfolioAllocationChart from '../components/PortfolioAllocationChart';
 import PriceChange from '../components/PriceChange';
 
 // Moedas sempre disponíveis no seletor, mesmo sem nenhuma posição ainda nelas -
@@ -209,6 +210,13 @@ export default function Portfolio() {
               * exclui posições sem preço de mercado ou câmbio conhecido ainda
             </p>
           )}
+        </div>
+      )}
+
+      {totals.hasAny && (
+        <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-3">Distribuição do portfolio</p>
+          <PortfolioAllocationChart positions={positions} />
         </div>
       )}
 
