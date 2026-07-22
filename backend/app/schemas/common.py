@@ -27,6 +27,11 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+# ---- Waitlist ----
+class WaitlistIn(BaseModel):
+    email: EmailStr
+
+
 # ---- Watchlist ----
 class WatchlistItemIn(BaseModel):
     ticker: str = Field(min_length=1, max_length=20)

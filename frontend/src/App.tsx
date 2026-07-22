@@ -7,6 +7,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Portfolio from './pages/Portfolio';
+import Register from './pages/Register';
 import StockDetail from './pages/StockDetail';
 import StrategyEditor from './pages/StrategyEditor';
 import StrategyWorkspace from './pages/StrategyWorkspace';
@@ -19,6 +20,7 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<Layout />}>
                   <Route path="/" element={<Overview />} />

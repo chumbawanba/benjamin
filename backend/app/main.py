@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import analyst, auth, evaluations, portfolio, strategies, watchlist
+from app.routers import analyst, auth, evaluations, portfolio, strategies, waitlist, watchlist
 from app.scheduler import daily_refresh_job, weekly_job
 
 
@@ -32,7 +32,10 @@ app.add_middleware(
     # regex em vez de lista fixa: permite aceder a partir de outro dispositivo na
     # mesma rede local (ex: telemóvel), sem abrir para a internet. Auth é via JWT
     # no header Authorization, não cookies — não precisamos de allow_credentials.
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):5173",
+    # A segunda alternativa (appbenjamin.com) é só para a landing page estática
+    # (origem diferente de beta.appbenjamin.com) poder chamar POST /waitlist -
+    # a app beta em si é same-origin com a API via Caddy, não precisa de CORS.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):5173|https://(www\.)?appbenjamin\.com",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,6 +47,7 @@ app.include_router(strategies.router, prefix=API)
 app.include_router(evaluations.router, prefix=API)
 app.include_router(analyst.router, prefix=API)
 app.include_router(portfolio.router, prefix=API)
+app.include_router(waitlist.router, prefix=API)
 
 
 @app.get("/health")
