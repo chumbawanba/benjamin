@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Position } from '../api/types';
+import PortfolioAllocationChart from './PortfolioAllocationChart';
 
 function toNum(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -81,6 +82,10 @@ export default function PortfolioSummaryCard() {
             {totals.plPct !== null && ` (${totals.plPct > 0 ? '+' : ''}${totals.plPct.toFixed(1)}%)`}
           </p>
         </div>
+      </div>
+
+      <div className="border-t border-gray-100 dark:border-slate-800 mt-3 pt-3">
+        <PortfolioAllocationChart positions={positions} />
       </div>
     </Link>
   );
