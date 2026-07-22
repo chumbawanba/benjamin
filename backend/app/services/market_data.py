@@ -251,17 +251,40 @@ async def refresh_prices(db: AsyncSession, stock: Stock) -> int:
     return inserted
 
 
-async def _backfill_history(db: AsyncSession, stock: Stock, existing_dates: set[date]) -> int:
+def _alt_ticker_symbol(ticker: str) -> str | None:
+    """Símbolo alternativo a tentar quando um fornecedor não reconhece o
+    ticker tal como está guardado - cobre ações de classes distintas (ex:
+    Berkshire Hathaway classe B: Finnhub costuma aceitar 'BRK.B' ou 'BRK-B',
+    mas a Twelve Data pode só reconhecer um dos dois formatos). O ticker é
+    validado/criado via Finnhub (validate_and_create_stock), por isso pode
+    ficar guardado num formato que a Twelve Data não entende, mesmo vindo da
+    pesquisa - sem isto, uma ação assim ficava com histórico insuficiente
+    indefinidamente (só 1 snapshot/dia via Finnhub /quote, nunca o backfill
+    de 365 dias)."""
+    if "." in ticker:
+        return ticker.replace(".", "-")
+    if "-" in ticker:
+        return ticker.replace("-", ".")
+    return None
+
+
+async def _fetch_time_series_values(symbol: str) -> list | None:
     try:
         data = await _twelvedata_get(
-            "time_series", {"symbol": stock.ticker, "interval": "1day", "outputsize": "365"}
+            "time_series", {"symbol": symbol, "interval": "1day", "outputsize": "365"}
         )
     except Exception:
-        logger.warning(
-            "Twelve Data indisponível a preencher histórico de %s", stock.ticker, exc_info=True
-        )
-        return 0
-    values = data.get("values") if isinstance(data, dict) else None
+        logger.warning("Twelve Data indisponível a preencher histórico de %s", symbol, exc_info=True)
+        return None
+    return data.get("values") if isinstance(data, dict) else None
+
+
+async def _backfill_history(db: AsyncSession, stock: Stock, existing_dates: set[date]) -> int:
+    values = await _fetch_time_series_values(stock.ticker)
+    if not values:
+        alt = _alt_ticker_symbol(stock.ticker)
+        if alt:
+            values = await _fetch_time_series_values(alt)
     if not values:
         return 0
     inserted = 0

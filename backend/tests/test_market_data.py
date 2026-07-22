@@ -88,6 +88,58 @@ async def test_get_price_change_no_snapshots(db_session):
     assert change_pct is None
 
 
+def test_alt_ticker_symbol_swaps_dot_to_hyphen():
+    assert market_data._alt_ticker_symbol("BRK.B") == "BRK-B"
+
+
+def test_alt_ticker_symbol_swaps_hyphen_to_dot():
+    assert market_data._alt_ticker_symbol("BRK-B") == "BRK.B"
+
+
+def test_alt_ticker_symbol_none_without_punctuation():
+    assert market_data._alt_ticker_symbol("AAPL") is None
+
+
+async def test_backfill_history_falls_back_to_alt_symbol_format(db_session):
+    """Reproduz o caso da Berkshire classe B: a stock fica guardada como
+    'BRK.B' (formato devolvido pela pesquisa da Finnhub), mas a Twelve Data
+    só reconhece 'BRK-B' - sem o fallback, o histórico ficava sempre vazio
+    (só 1 snapshot/dia via Finnhub /quote, nunca os 365 dias do backfill)."""
+    stock = Stock(ticker="BRK.B", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+
+    async def fake_twelvedata_get(path, params):
+        assert path == "time_series"
+        if params["symbol"] == "BRK.B":
+            return {"code": 400, "message": "symbol not found"}  # sem "values"
+        if params["symbol"] == "BRK-B":
+            return {"values": [
+                {"datetime": "2026-07-20", "open": "440", "high": "445", "low": "438", "close": "442", "volume": "1000"},
+                {"datetime": "2026-07-21", "open": "442", "high": "446", "low": "440", "close": "444", "volume": "1200"},
+            ]}
+        raise AssertionError(f"unexpected symbol {params['symbol']}")
+
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=fake_twelvedata_get)):
+        inserted = await market_data._backfill_history(db_session, stock, set())
+
+    assert inserted == 2
+    from sqlalchemy import select
+    rows = (await db_session.execute(select(PriceSnapshot).where(PriceSnapshot.stock_id == stock.id))).scalars().all()
+    assert len(rows) == 2
+
+
+async def test_backfill_history_returns_zero_when_both_formats_fail(db_session):
+    stock = Stock(ticker="BRK.B", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(return_value={"code": 400})):
+        inserted = await market_data._backfill_history(db_session, stock, set())
+
+    assert inserted == 0
+
+
 async def test_refresh_fundamentals_maps_extended_metrics(db_session):
     stock = Stock(ticker="AAPL", currency="USD")
     db_session.add(stock)
