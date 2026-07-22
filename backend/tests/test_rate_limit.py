@@ -62,7 +62,7 @@ async def test_analyst_ask_rate_limited(client, user_a):
     from tests.conftest import login
     headers = await login(client, "a@test.dev", "password-a")
 
-    for _ in range(20):
+    for _ in range(10):
         resp = await client.post(
             "/analyst/ask", json={"question": "?", "history": []}, headers=headers,
         )

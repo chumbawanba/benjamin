@@ -40,7 +40,7 @@ async def get_summary(user: User = Depends(get_current_user)):
 @router.post("/ask", response_model=AnalystAskOut)
 async def ask(
     body: AnalystAskIn,
-    user: User = Depends(rate_limit_user("analyst_ask", max_calls=20, window_seconds=600)),
+    user: User = Depends(rate_limit_user("analyst_ask", max_calls=10, window_seconds=86400)),
     db: AsyncSession = Depends(get_db),
 ):
     """Pergunta ao Benjamin com o contexto completo (portfólio + watchlist +
@@ -83,7 +83,7 @@ async def update_prompt(
 
 @router.post("/summary/refresh", response_model=AnalystSummaryOut)
 async def refresh_summary(
-    user: User = Depends(rate_limit_user("analyst_summary_refresh", max_calls=5, window_seconds=600)),
+    user: User = Depends(rate_limit_user("analyst_summary_refresh", max_calls=5, window_seconds=86400)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
