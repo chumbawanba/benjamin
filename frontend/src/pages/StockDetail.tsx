@@ -193,7 +193,11 @@ export default function StockDetail() {
             <div>
               <p className="text-sm font-medium text-gray-900 dark:text-slate-100">{detail.strategy_name ?? 'Estratégia'}</p>
             </div>
-            <RecommendationBadge recommendation={detail.latest_evaluation.recommendation} />
+            <RecommendationBadge
+              recommendation={detail.latest_evaluation.recommendation}
+              buyScore={detail.latest_evaluation.buy_score}
+              sellScore={detail.latest_evaluation.sell_score}
+            />
           </div>
           <ul className="space-y-2">
             {detail.criteria.map((c, idx) => (

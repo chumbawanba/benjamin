@@ -125,7 +125,7 @@ export default function Feed({ embedded = false }: { embedded?: boolean }) {
                   </p>
                 </button>
                 <div className="shrink-0">
-                  <RecommendationBadge recommendation={ev.recommendation} />
+                  <RecommendationBadge recommendation={ev.recommendation} buyScore={ev.buy_score} sellScore={ev.sell_score} />
                 </div>
               </div>
 

@@ -214,7 +214,11 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
                   <p className="text-xs text-gray-500 dark:text-slate-400">{item.stock.name ?? '—'}</p>
                   <div className="flex gap-2 mt-2">
                     {item.latest_evaluation ? (
-                      <RecommendationBadge recommendation={item.latest_evaluation.recommendation} />
+                      <RecommendationBadge
+                        recommendation={item.latest_evaluation.recommendation}
+                        buyScore={item.latest_evaluation.buy_score}
+                        sellScore={item.latest_evaluation.sell_score}
+                      />
                     ) : (
                       <span className="text-xs text-gray-400 dark:text-slate-500">
                         Sem avaliação ainda — vai a Avaliações e clica em "Avaliar agora"

@@ -221,7 +221,11 @@ export default function Overview() {
                                   </div>
                                 </div>
                                 <div className="shrink-0">
-                                  <RecommendationBadge recommendation={signal.recommendation} />
+                                  <RecommendationBadge
+                                    recommendation={signal.recommendation}
+                                    buyScore={signal.buy_score}
+                                    sellScore={signal.sell_score}
+                                  />
                                 </div>
                               </li>
                             );
