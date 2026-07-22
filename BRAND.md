@@ -8,7 +8,7 @@
 
 ## Marca
 - Nome: Benjamin
-- Tagline: "Think before you invest."
+- Tagline: "Investe com cabeça, não por impulso." (anteriormente "Think before you invest.")
 - Domínio: appbenjamin.com
 
 ## Mission / Values / Personality
