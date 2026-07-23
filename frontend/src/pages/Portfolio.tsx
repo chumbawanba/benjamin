@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { PortfolioCurrency, Position } from '../api/types';
+import { PortfolioCurrency, Position, WatchlistItem } from '../api/types';
 import PortfolioAllocationChart from '../components/PortfolioAllocationChart';
 import PriceChange from '../components/PriceChange';
 
@@ -31,6 +31,7 @@ function plColorClass(v: number | null): string {
 
 export default function Portfolio() {
   const [positions, setPositions] = useState<Position[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,12 +53,14 @@ export default function Portfolio() {
   async function load() {
     setLoading(true);
     try {
-      const [data, curr] = await Promise.all([
+      const [data, curr, wl] = await Promise.all([
         api.get<Position[]>('/portfolio'),
         api.get<PortfolioCurrency>('/portfolio/currency'),
+        api.get<WatchlistItem[]>('/watchlist'),
       ]);
       setPositions(data);
       setCurrency(curr.currency);
+      setWatchlist(wl);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar portfolio');
     } finally {
@@ -86,6 +89,25 @@ export default function Portfolio() {
     const fromPositions = positions.map((p) => p.stock.currency).filter((c): c is string => !!c);
     return Array.from(new Set([...COMMON_CURRENCIES, ...fromPositions, currency]));
   }, [positions, currency]);
+
+  // Para o link "ver detalhe" de cada posição — a página StockDetail é
+  // indexada por watchlist_item_id, não por stock_id, por isso só há link
+  // quando a ação da posição também está na watchlist (mesmo padrão de
+  // Overview.tsx::watchlistByStockId).
+  const watchlistByStockId = useMemo(() => {
+    const map = new Map<string, WatchlistItem>();
+    watchlist.forEach((w) => map.set(w.stock.id, w));
+    return map;
+  }, [watchlist]);
+
+  // Ações da watchlist que ainda não têm posição — usado no dropdown "ou
+  // escolhe da watchlist" do formulário de adicionar (o backend rejeita uma
+  // 2ª posição na mesma ação, por isso já não faz sentido oferecê-las aqui).
+  const positionedTickers = useMemo(() => new Set(positions.map((p) => p.stock.ticker)), [positions]);
+  const watchlistOptions = useMemo(
+    () => watchlist.filter((w) => !positionedTickers.has(w.stock.ticker)),
+    [watchlist, positionedTickers],
+  );
 
   const totals = useMemo(() => {
     let costTotal = 0;
@@ -222,6 +244,23 @@ export default function Portfolio() {
 
       <form onSubmit={handleAdd} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
         <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Adicionar posição</p>
+        {watchlistOptions.length > 0 && (
+          <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 mb-2">
+            Ou escolhe da watchlist
+            <select
+              value=""
+              onChange={(e) => e.target.value && setTicker(e.target.value)}
+              className="flex-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-xs"
+            >
+              <option value="">Escolher…</option>
+              {watchlistOptions.map((w) => (
+                <option key={w.id} value={w.stock.ticker}>
+                  {w.stock.ticker} {w.stock.name ? `— ${w.stock.name}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="flex flex-wrap gap-2">
           <input
             value={ticker}
@@ -282,6 +321,7 @@ export default function Portfolio() {
             const needsConversion = p.stock.currency !== currency;
             const marketValueConvertedNum = toNum(p.market_value_converted);
             const plConvertedNum = toNum(p.unrealized_pl_converted);
+            const wlItem = watchlistByStockId.get(p.stock.id);
 
             return (
               <li
@@ -291,7 +331,16 @@ export default function Portfolio() {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.ticker}</span>
+                      {wlItem ? (
+                        <Link
+                          to={`/stocks/${wlItem.id}`}
+                          className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400"
+                        >
+                          {p.stock.ticker}
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.ticker}</span>
+                      )}
                       {p.stock.asset_type === 'etf' && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
                           ETF

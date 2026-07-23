@@ -93,6 +93,11 @@ export interface TickerSearchResult {
   market_hint: string | null;
 }
 
+export interface Suggestion {
+  ticker: string;
+  based_on: string;
+}
+
 export interface MetricInfo {
   key: string;
   kind: 'price' | 'fundamental';

@@ -97,6 +97,23 @@ async def get_company_news(ticker: str, days: int = 7, limit: int = 5) -> list[d
     return out
 
 
+async def get_peers(ticker: str) -> list[str]:
+    """Símbolos de empresas "parecidas" (mesma indústria) via Finnhub
+    /stock/peers — usado para sugerir novas ações a partir das que já estão
+    na watchlist do utilizador. O endpoint devolve uma lista simples de
+    símbolos (não um dict), ao contrário da generalidade dos endpoints da
+    Finnhub usados neste ficheiro. Nunca lança exceção — devolve lista vazia
+    se falhar (mesmo padrão de search_tickers/get_company_news)."""
+    try:
+        data = await _finnhub_get("stock/peers", {"symbol": ticker})
+    except Exception:
+        logger.warning("Finnhub indisponível a obter peers de %s", ticker, exc_info=True)
+        return []
+    if not isinstance(data, list):
+        return []
+    return [p.upper() for p in data if isinstance(p, str) and p.upper() != ticker.upper()]
+
+
 MARKET_INDEX_PROXIES = [
     ("SPY", "S&P 500 (EUA, mercado amplo)"),
     ("QQQ", "Nasdaq 100 (tecnologia EUA)"),

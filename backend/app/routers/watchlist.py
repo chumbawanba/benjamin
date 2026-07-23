@@ -23,6 +23,7 @@ from app.schemas.common import (
     PricePointOut,
     StockDetailOut,
     StockOut,
+    SuggestionOut,
     TickerSearchResult,
     WatchlistItemIn,
     WatchlistItemOut,
@@ -110,6 +111,42 @@ async def watchlist_news(
 
     deduped.sort(key=lambda i: i["published_at"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     return deduped[:limit]
+
+
+@router.get("/suggestions", response_model=list[SuggestionOut])
+async def watchlist_suggestions(
+    limit: int = Query(default=8, le=20),
+    user: User = Depends(rate_limit_user("watchlist_suggestions", max_calls=10, window_seconds=600)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sugestões de novas ações "parecidas" (mesma indústria, via Finnhub
+    /stock/peers) com as que já estão na watchlist do utilizador — outra
+    forma de descobrir ações além da pesquisa manual por nome/símbolo.
+    Exclui sugestões que já estão na watchlist; para cada ticker sugerido
+    indica-se o `based_on` (ticker da watchlist que originou a sugestão)."""
+    tickers = (
+        await db.execute(
+            select(Stock.ticker)
+            .join(WatchlistItem, WatchlistItem.stock_id == Stock.id)
+            .where(WatchlistItem.user_id == user.id)
+        )
+    ).scalars().all()
+    if not tickers:
+        return []
+    existing = {t.upper() for t in tickers}
+    results = await asyncio.gather(*(market_data.get_peers(t) for t in tickers))
+
+    suggestions: list[SuggestionOut] = []
+    seen: set[str] = set()
+    for source_ticker, peers in zip(tickers, results):
+        for peer in peers:
+            if peer in existing or peer in seen:
+                continue
+            seen.add(peer)
+            suggestions.append(SuggestionOut(ticker=peer, based_on=source_ticker))
+            if len(suggestions) >= limit:
+                return suggestions
+    return suggestions
 
 
 @router.get("", response_model=list[WatchlistItemOut])

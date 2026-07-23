@@ -173,6 +173,70 @@ async def test_watchlist_news_failure_returns_empty(client, user_a):
     assert resp.json() == []
 
 
+async def test_suggestions_empty_watchlist(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get("/watchlist/suggestions", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_suggestions_returns_peers_excluding_existing(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    from unittest.mock import AsyncMock, patch
+
+    with mock_market_data_valid():
+        await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+        await client.post("/watchlist", json={"ticker": "MSFT"}, headers=headers)
+
+    # AAPL sugere MSFT (já na watchlist, deve ser excluído) e GOOGL;
+    # MSFT sugere AAPL (já na watchlist) e GOOGL (repetido, deve ser dedup).
+    with patch(
+        "app.services.market_data._finnhub_get",
+        new=AsyncMock(return_value=["MSFT", "GOOGL"]),
+    ):
+        resp = await client.get("/watchlist/suggestions", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    tickers = [s["ticker"] for s in body]
+    assert "MSFT" not in tickers
+    assert "AAPL" not in tickers
+    assert tickers.count("GOOGL") == 1
+    assert body[0]["based_on"] in ("AAPL", "MSFT")
+
+
+async def test_suggestions_failure_returns_empty(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    from unittest.mock import AsyncMock, patch
+
+    with mock_market_data_valid():
+        await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+
+    with patch(
+        "app.services.market_data._finnhub_get",
+        new=AsyncMock(side_effect=Exception("429 Too Many Requests")),
+    ):
+        resp = await client.get("/watchlist/suggestions", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_suggestions_isolated_between_users(client, user_a, user_b):
+    headers_a = await login(client, "a@test.dev", "password-a")
+    headers_b = await login(client, "b@test.dev", "password-b")
+    from unittest.mock import AsyncMock, patch
+
+    with mock_market_data_valid():
+        await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers_a)
+
+    with patch(
+        "app.services.market_data._finnhub_get",
+        new=AsyncMock(return_value=["GOOGL"]),
+    ):
+        resp = await client.get("/watchlist/suggestions", headers=headers_b)
+    assert resp.status_code == 200
+    assert resp.json() == []  # user_b não tem watchlist, sem peers a agregar
+
+
 async def test_reorder(client, user_a):
     headers = await login(client, "a@test.dev", "password-a")
     with mock_market_data_valid():

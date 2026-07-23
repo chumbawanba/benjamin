@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { TickerSearchResult, WatchlistItem } from '../api/types';
+import { Suggestion, TickerSearchResult, WatchlistItem } from '../api/types';
 import PriceChange from '../components/PriceChange';
 import { formatRelativeTime } from '../utils/format';
 
@@ -20,6 +20,8 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
   const [results, setResults] = useState<TickerSearchResult[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+
   async function load() {
     setLoading(true);
     try {
@@ -37,6 +39,30 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
   }, []);
 
   const watchedTickers = new Set(items.map((i) => i.stock.ticker));
+  // Chave estável (independente de reordenação, que muda a referência de
+  // `items` a cada clique nas setas ▲▼) — evita repetir o pedido a
+  // /watchlist/suggestions (rate-limited) sempre que só a ordem muda.
+  const watchedKey = [...watchedTickers].sort().join(',');
+
+  useEffect(() => {
+    if (watchedTickers.size === 0) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<Suggestion[]>('/watchlist/suggestions')
+      .then((data) => {
+        if (!cancelled) setSuggestions(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestions([]); // best-effort, não bloqueia a página
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedKey]);
 
   async function handleAddTicker(ticker: string) {
     setAddingTicker(ticker);
@@ -119,6 +145,25 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
           })}
         </div>
       </div>
+
+      {suggestions.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Ações parecidas com as que já segues</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestions.map((s) => (
+              <button
+                key={s.ticker}
+                onClick={() => handleAddTicker(s.ticker)}
+                disabled={addingTicker === s.ticker}
+                title={`Sugerido por seguires ${s.based_on} (mesma indústria, via Finnhub)`}
+                className="text-xs font-medium px-3 py-1.5 rounded-full border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {addingTicker === s.ticker ? '…' : `+ ${s.ticker}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSearch} className="flex gap-2 mb-2">
         <input

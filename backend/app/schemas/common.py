@@ -157,6 +157,11 @@ class TickerSearchResult(BaseModel):
     market_hint: str | None = None
 
 
+class SuggestionOut(BaseModel):
+    ticker: str
+    based_on: str  # ticker da watchlist que originou a sugestão (mesma indústria)
+
+
 class NewsItemOut(BaseModel):
     ticker: str
     headline: str | None
