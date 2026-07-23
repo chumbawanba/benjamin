@@ -47,6 +47,13 @@ function BacktestSection({ templateId, stockId }: { templateId: string; stockId:
               <> · Comprar-e-manter: {state.data.buy_and_hold_return_pct.toFixed(2)}%</>
             )}
           </p>
+          {state.data.trades.length === 0 && (
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+              Nenhuma compra/venda simulada — os critérios desta estratégia não chegaram a ser cumpridos no último
+              ano para esta ação (não é um erro; a estratégia pode simplesmente ser demasiado restritiva, ou esta
+              ação nunca ter estado nas condições certas no período).
+            </p>
+          )}
         </>
       )}
     </div>

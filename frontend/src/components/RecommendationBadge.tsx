@@ -13,6 +13,20 @@ function toNum(v: number | string | null | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+// Explicação do que cada recomendação significa e como é calculada — cada
+// critério da estratégia contribui com o seu peso para um score de compra e
+// um score de venda (0-100%); se o score de venda atingir 70% é SELL (a
+// venda é verificada primeiro), senão se o score de compra atingir 70% é
+// BUY, senão é HOLD. HOLD não é "seguro" nem uma recomendação em si — é só
+// o resultado de nenhum dos dois lados ter chegado ao limiar com os
+// pesos/critérios configurados nesta estratégia (ver StrategyEditor para o
+// que cada critério e peso individual significam).
+const EXPLANATIONS: Record<Props['recommendation'], string> = {
+  BUY: 'Compra: a pontuação ponderada dos critérios de compra desta estratégia atingiu o limiar de 70%.',
+  SELL: 'Venda: a pontuação ponderada dos critérios de venda desta estratégia atingiu o limiar de 70% (a venda é verificada antes da compra).',
+  HOLD: 'Manter: nem os critérios de compra nem os de venda atingiram o limiar de 70% — não é um sinal de segurança, só significa que nenhum lado disparou com os pesos e limiares configurados nesta estratégia.',
+};
+
 // Badge com a recomendação final + o score do lado que disparou o sinal (ex:
 // "BUY 92%") — substituiu um "ScoreBadge" antigo que mostrava sempre os dois
 // lados (Buy X% / Sell Y%), redundante quando só um era relevante. Para HOLD
@@ -29,7 +43,10 @@ export default function RecommendationBadge({ recommendation, buyScore, sellScor
   const score = recommendation === 'BUY' ? toNum(buyScore) : recommendation === 'SELL' ? toNum(sellScore) : null;
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${classes}`}>
+    <span
+      title={EXPLANATIONS[recommendation]}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold cursor-help ${classes}`}
+    >
       {recommendation}
       {score !== null && <span className="ml-1 font-normal opacity-80">{score.toFixed(0)}%</span>}
     </span>

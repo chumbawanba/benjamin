@@ -44,6 +44,18 @@ function formatIndicatorValue(key: string, value: number | null): string {
 const CURRENT_RATIO_DESCRIPTION =
   'Ativo circulante a dividir pelo passivo circulante. Acima de 1 sugere que a empresa consegue cobrir as dívidas de curto prazo.';
 
+// Períodos do gráfico de preço - "days" é uma aproximação em dias de
+// negociação (não dias corridos), aplicada por slice() sobre o histórico já
+// carregado (365 dias, ver watchlist_item_detail) - nenhuma chamada extra à
+// API. slice(-N) com N maior que o histórico disponível devolve o histórico
+// todo, por isso funciona também para ações adicionadas há pouco tempo.
+const CHART_PERIODS = [
+  { label: '1M', days: 21 },
+  { label: '3M', days: 63 },
+  { label: '6M', days: 126 },
+  { label: '1A', days: 365 },
+] as const;
+
 function formatCriterionValue(criterion: { threshold_value: number | null; threshold_value_max: number | null; operator: string }): string {
   if (criterion.operator === 'between') {
     return `${formatDecimal(criterion.threshold_value)} - ${formatDecimal(criterion.threshold_value_max)}`;
@@ -68,6 +80,7 @@ export default function StockDetail() {
   const [detail, setDetail] = useState<StockDetailType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<(typeof CHART_PERIODS)[number]['label']>('3M');
 
   useEffect(() => {
     let cancelled = false;
@@ -101,8 +114,10 @@ export default function StockDetail() {
     );
   }
 
-  const closes = detail.price_history.map((p) => p.close);
-  const sma200 = detail.price_history.map((p) => p.sma_200);
+  const periodDays = CHART_PERIODS.find((p) => p.label === chartPeriod)?.days ?? detail.price_history.length;
+  const visibleHistory = detail.price_history.slice(-periodDays);
+  const closes = visibleHistory.map((p) => p.close);
+  const sma200 = visibleHistory.map((p) => p.sma_200);
   const hasSma200 = sma200.some((v) => v !== null && v !== undefined);
 
   return (
@@ -145,6 +160,21 @@ export default function StockDetail() {
       )}
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
+        <div className="flex items-center justify-end gap-1 mb-2">
+          {CHART_PERIODS.map((p) => (
+            <button
+              key={p.label}
+              onClick={() => setChartPeriod(p.label)}
+              className={`text-xs px-2 py-0.5 rounded-lg font-medium ${
+                chartPeriod === p.label
+                  ? 'bg-navy-600 text-white dark:bg-navy-500'
+                  : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <Sparkline
           points={closes}
           secondaryPoints={hasSma200 ? sma200 : undefined}
@@ -152,7 +182,7 @@ export default function StockDetail() {
           height={100}
         />
         <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
-          Últimos {detail.price_history.length} dias com fecho registado.
+          Últimos {visibleHistory.length} dias com fecho registado.
           {!hasSma200 && ' Histórico ainda insuficiente para a SMA 200 (precisa de 200 dias).'}
         </p>
       </div>
