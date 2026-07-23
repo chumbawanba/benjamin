@@ -357,11 +357,50 @@ def _alt_ticker_symbol(ticker: str) -> str | None:
     return None
 
 
-async def _fetch_time_series_values(symbol: str) -> list | None:
+# Sufixo de bolsa da Finnhub (ex: 'VUSA.F') -> mic_code ISO 10383 que a
+# Twelve Data espera como parâmetro à parte (confirmado na documentação da
+# Twelve Data: time_series aceita symbol + mic_code, ex: 'AAPL' + 'XNAS' -
+# ver https://twelvedata.com/docs). A Finnhub cola o sufixo ao símbolo; a
+# Twelve Data não entende esse formato, por isso um ticker assim ficava sem
+# histórico mesmo depois do fallback ponto/hífen acima (esse só cobre classes
+# de ações tipo BRK.B, não sufixos de bolsa).
+#
+# Só cobre as bolsas europeias mais relevantes e sem ambiguidade razoável no
+# sufixo - de propósito não inclui sufixos de bolsas regionais alemãs mais
+# pequenas (Estugarda, Hamburgo, Munique, Berlim, Dusseldorf) porque não há
+# confirmação de que o sufixo da Finnhub corresponda de forma unívoca a essas
+# praças, e devolver dados da bolsa errada é pior do que não devolver nada.
+_TICKER_SUFFIX_MIC_CODES: dict[str, str] = {
+    "L": "XLON",   # Londres
+    "F": "XFRA",   # Frankfurt
+    "DE": "XETR",  # Xetra (Alemanha)
+    "PA": "XPAR",  # Paris (Euronext)
+    "AS": "XAMS",  # Amesterdão (Euronext)
+    "BR": "XBRU",  # Bruxelas (Euronext)
+    "LS": "XLIS",  # Lisboa (Euronext)
+    "MI": "XMIL",  # Milão (Borsa Italiana)
+    "MC": "XMAD",  # Madrid (BME)
+    "SW": "XSWX",  # Suíça (SIX)
+    "TO": "XTSE",  # Toronto
+    "HK": "XHKG",  # Hong Kong
+    "AX": "XASX",  # Austrália (ASX)
+}
+
+
+def _split_ticker_suffix(ticker: str) -> tuple[str, str | None]:
+    """'VUSA.F' -> ('VUSA', 'F'); 'AAPL' -> ('AAPL', None)."""
+    if "." not in ticker:
+        return ticker, None
+    base, suffix = ticker.rsplit(".", 1)
+    return base, suffix.upper()
+
+
+async def _fetch_time_series_values(symbol: str, mic_code: str | None = None) -> list | None:
+    params = {"symbol": symbol, "interval": "1day", "outputsize": "365"}
+    if mic_code:
+        params["mic_code"] = mic_code
     try:
-        data = await _twelvedata_get(
-            "time_series", {"symbol": symbol, "interval": "1day", "outputsize": "365"}
-        )
+        data = await _twelvedata_get("time_series", params)
     except Exception:
         logger.warning("Twelve Data indisponível a preencher histórico de %s", symbol, exc_info=True)
         return None
@@ -374,6 +413,11 @@ async def _backfill_history(db: AsyncSession, stock: Stock, existing_dates: set[
         alt = _alt_ticker_symbol(stock.ticker)
         if alt:
             values = await _fetch_time_series_values(alt)
+    if not values:
+        base, suffix = _split_ticker_suffix(stock.ticker)
+        mic_code = _TICKER_SUFFIX_MIC_CODES.get(suffix) if suffix else None
+        if mic_code:
+            values = await _fetch_time_series_values(base, mic_code=mic_code)
     if not values:
         return 0
     inserted = 0

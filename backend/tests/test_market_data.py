@@ -306,6 +306,59 @@ async def test_backfill_history_returns_zero_when_both_formats_fail(db_session):
     assert inserted == 0
 
 
+def test_split_ticker_suffix_with_suffix():
+    assert market_data._split_ticker_suffix("VUSA.F") == ("VUSA", "F")
+
+
+def test_split_ticker_suffix_without_suffix():
+    assert market_data._split_ticker_suffix("AAPL") == ("AAPL", None)
+
+
+async def test_backfill_history_falls_back_to_mic_code_for_known_suffix(db_session):
+    """Reproduz o caso do VUSA.F: a Finnhub devolve o ticker com o sufixo de
+    bolsa colado ('VUSA.F' = Frankfurt), mas a Twelve Data não reconhece esse
+    formato - espera o símbolo puro + mic_code (ISO 10383) à parte. Nem o
+    símbolo tal como está nem a troca ponto/hífen (pensada para classes de
+    ações tipo BRK.B, não sufixos de bolsa) resolvem isto; só o terceiro
+    fallback (separar sufixo -> mic_code) deve funcionar."""
+    stock = Stock(ticker="VUSA.F", currency="EUR")
+    db_session.add(stock)
+    await db_session.flush()
+
+    async def fake_twelvedata_get(path, params):
+        assert path == "time_series"
+        if params["symbol"] == "VUSA" and params.get("mic_code") == "XFRA":
+            return {"values": [
+                {"datetime": "2026-07-20", "open": "90", "high": "91", "low": "89", "close": "90.5", "volume": "500"},
+            ]}
+        return {"code": 400, "message": "symbol not found"}  # 'VUSA.F' e 'VUSA-F'
+
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=fake_twelvedata_get)):
+        inserted = await market_data._backfill_history(db_session, stock, set())
+
+    assert inserted == 1
+
+
+async def test_backfill_history_skips_mic_code_fallback_for_unknown_suffix(db_session):
+    """Sufixo sem mic_code conhecido (ver _TICKER_SUFFIX_MIC_CODES) - não deve
+    sequer tentar uma 3ª chamada à Twelve Data, só a literal e a troca ./-."""
+    stock = Stock(ticker="XPTO.ZZ", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+
+    calls = []
+
+    async def fake_twelvedata_get(path, params):
+        calls.append(params["symbol"])
+        return {"code": 400}
+
+    with patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=fake_twelvedata_get)):
+        inserted = await market_data._backfill_history(db_session, stock, set())
+
+    assert inserted == 0
+    assert calls == ["XPTO.ZZ", "XPTO-ZZ"]  # sem 3ª tentativa
+
+
 async def test_refresh_fundamentals_maps_extended_metrics(db_session):
     stock = Stock(ticker="AAPL", currency="USD")
     db_session.add(stock)
