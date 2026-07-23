@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy import select
+
 from app.models import PriceSnapshot, Stock
 from app.services import market_data
 
@@ -237,8 +239,10 @@ async def test_ensure_fresh_retries_when_recent_but_insufficient_history(db_sess
 
 async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session):
     """Com histórico completo (>= MIN_HISTORY_ROWS) e um snapshot recente, o
-    curto-circuito de freshness continua a funcionar - não deve voltar a
-    chamar nenhum fornecedor externo."""
+    curto-circuito de freshness do BACKFILL continua a funcionar - não deve
+    voltar a chamar a Twelve Data. Mas a cotação de hoje ainda é atualizada via
+    Finnhub (ver test_ensure_fresh_still_refreshes_quote_when_history_sufficient
+    - este é o comportamento novo que resolve o preço ficar congelado)."""
     stock = Stock(ticker="AAPL", name="Apple Inc.", currency="USD")
     db_session.add(stock)
     await db_session.flush()
@@ -249,8 +253,59 @@ async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session)
         ))
     await db_session.commit()
 
-    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))), \
+    finnhub_mock = AsyncMock(return_value={"c": 152.0})
+    with patch("app.services.market_data._finnhub_get", new=finnhub_mock), \
          patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        await market_data.ensure_fresh(db_session, stock)  # não deve lançar
+
+    finnhub_mock.assert_called_once_with("quote", {"symbol": "AAPL"})
+
+
+async def test_ensure_fresh_still_refreshes_quote_when_history_sufficient(db_session):
+    """Bug real: GOOG caiu ~6% intradiário e a app continuava a mostrar o
+    preço da 1ª consulta do dia - ensure_fresh nunca voltava a chamar a
+    Finnhub depois de ter histórico e snapshot de hoje. Com histórico
+    suficiente, o snapshot de HOJE deve ser atualizado (upsert), não só criado
+    uma vez."""
+    stock = Stock(ticker="GOOG", name="Alphabet Inc.", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    for i in range(market_data.MIN_HISTORY_ROWS):
+        db_session.add(PriceSnapshot(
+            stock_id=stock.id, date=today - timedelta(days=i), close=Decimal("200.00"),
+        ))
+    await db_session.commit()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value={"c": 188.0, "h": 201.0, "l": 187.5})):
+        await market_data.ensure_fresh(db_session, stock)
+
+    row = (
+        await db_session.execute(
+            select(PriceSnapshot).where(PriceSnapshot.stock_id == stock.id, PriceSnapshot.date == today)
+        )
+    ).scalar_one()
+    assert row.close == Decimal("188")
+    assert stock.last_quote_at is not None
+
+
+async def test_ensure_fresh_skips_quote_refresh_within_cooldown(db_session):
+    """Duas visitas seguidas à mesma ação dentro de QUOTE_REFRESH_COOLDOWN não
+    devem martelar a Finnhub - só passado o cooldown é que se tenta de novo."""
+    stock = Stock(
+        ticker="AAPL", name="Apple Inc.", currency="USD",
+        last_quote_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    for i in range(market_data.MIN_HISTORY_ROWS):
+        db_session.add(PriceSnapshot(
+            stock_id=stock.id, date=today - timedelta(days=i), close=Decimal("150.00"),
+        ))
+    await db_session.commit()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
         await market_data.ensure_fresh(db_session, stock)  # não deve lançar
 
 

@@ -8,6 +8,7 @@ export interface Stock {
   sector: string | null;
   asset_type: 'stock' | 'etf';
   exchange: string | null;
+  last_quote_at: string | null;
 }
 
 export interface EvaluationSummary {

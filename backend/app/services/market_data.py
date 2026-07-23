@@ -23,9 +23,20 @@ from app.models import FundamentalsSnapshot, PriceSnapshot, Stock
 
 logger = logging.getLogger(__name__)
 
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    """SQLite/aiosqlite (usado nos testes) devolve datetimes sem tzinfo mesmo
+    em colunas DateTime(timezone=True) - normaliza para UTC explícito antes de
+    subtrair (mesmo padrão de app/routers/analyst.py::_as_utc)."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 FRESHNESS_DAYS = 3
 MIN_HISTORY_ROWS = 200  # cobre SMA_200; abaixo disto tenta backfill via Twelve Data
 BACKFILL_RETRY_COOLDOWN = timedelta(hours=6)  # ver ensure_fresh
+QUOTE_REFRESH_COOLDOWN = timedelta(minutes=15)  # ver ensure_fresh/_record_latest_quote
 HTTP_TIMEOUT = 10.0
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
@@ -298,24 +309,25 @@ async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
 
 async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     """Atualiza snapshots se o mais recente tiver mais de FRESHNESS_DAYS, OU se
-    ainda não houver histórico suficiente (< MIN_HISTORY_ROWS).
+    ainda não houver histórico suficiente (< MIN_HISTORY_ROWS). Com histórico
+    já suficiente e recente, ainda assim tenta atualizar a cotação de hoje
+    (sujeito a QUOTE_REFRESH_COOLDOWN, bem mais curto) - ver bug real: o preço
+    mostrado ficava congelado no valor da 1ª consulta do dia e não refletia
+    quedas/subidas intradiárias (ex: GOOG a cair ~6% e a app continuar a
+    mostrar o preço de abertura até ao dia seguinte).
 
-    A segunda condição é necessária por si só: uma ação com um snapshot de
-    hoje (via Finnhub /quote, que corre em todo refresh_prices) mas cujo
-    backfill de 365 dias nunca teve sucesso (ex: symbol não reconhecido pela
-    Twelve Data, ver _alt_ticker_symbol) tinha sempre `latest` = hoje, logo
-    ficava "fresca" para sempre e nunca mais tentava o backfill outra vez -
-    ficava com histórico insuficiente indefinidamente mesmo já com a correção
-    do formato do símbolo em vigor.
+    A condição de histórico insuficiente é necessária por si só: uma ação com
+    um snapshot de hoje (via Finnhub /quote) mas cujo backfill de 365 dias
+    nunca teve sucesso (ex: symbol não reconhecido pela Twelve Data, ver
+    _alt_ticker_symbol) tinha sempre `latest` = hoje, logo ficava "fresca" para
+    sempre e nunca mais tentava o backfill outra vez.
 
     Um ticker que os provedores rejeitam de forma permanente (ex: fora de
     cobertura do plano gratuito - ver VUSA.F) nunca acumula PriceSnapshot
-    rows, logo nunca satisfaz `count >= MIN_HISTORY_ROWS` e o cascade
-    completo de retries (3 tentativas Twelve Data + até 4 chamadas Finnhub)
-    corria em TODA a visita à página, esgotando a quota partilhada da Twelve
-    Data (800 pedidos/dia) para as restantes ações. BACKFILL_RETRY_COOLDOWN
-    limita isto a uma tentativa de cada vez esse intervalo, independentemente
-    do resultado."""
+    rows, logo nunca satisfaz `count >= MIN_HISTORY_ROWS` e cai sempre no ramo
+    de backfill abaixo, gated por BACKFILL_RETRY_COOLDOWN (protege a quota
+    partilhada da Twelve Data/Finnhub) - nunca chega a tentar o refresh de
+    cotação a cada 15min, que só se aplica a ações já com histórico OK."""
     await _backfill_profile(db, stock)
     latest = (
         await db.execute(
@@ -329,19 +341,19 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     ).scalar_one()
     today = datetime.now(timezone.utc).date()
     is_recent = latest is not None and (today - latest) <= timedelta(days=FRESHNESS_DAYS)
+
     if is_recent and count >= MIN_HISTORY_ROWS:
+        existing_dates = set(
+            (await db.execute(
+                select(PriceSnapshot.date).where(PriceSnapshot.stock_id == stock.id)
+            )).scalars().all()
+        )
+        await _record_latest_quote(db, stock, existing_dates)
         return
 
-    if stock.last_backfill_attempt_at is not None:
-        # SQLite/aiosqlite (usado nos testes) devolve datetimes sem tzinfo
-        # mesmo em colunas DateTime(timezone=True) - normalizar para UTC
-        # explícito antes de subtrair (mesmo padrão de app/routers/analyst.py::_as_utc).
-        last_attempt = stock.last_backfill_attempt_at
-        if last_attempt.tzinfo is None:
-            last_attempt = last_attempt.replace(tzinfo=timezone.utc)
-        elapsed = datetime.now(timezone.utc) - last_attempt
-        if elapsed < BACKFILL_RETRY_COOLDOWN:
-            return
+    last_attempt = _as_utc(stock.last_backfill_attempt_at)
+    if last_attempt is not None and datetime.now(timezone.utc) - last_attempt < BACKFILL_RETRY_COOLDOWN:
+        return
 
     stock.last_backfill_attempt_at = datetime.now(timezone.utc)
     await refresh_prices(db, stock)
@@ -464,9 +476,19 @@ async def _backfill_history(db: AsyncSession, stock: Stock, existing_dates: set[
 
 
 async def _record_latest_quote(db: AsyncSession, stock: Stock, existing_dates: set[date]) -> int:
-    today = datetime.now(timezone.utc).date()
-    if today in existing_dates:
+    """Regista/atualiza o snapshot de PREÇO de hoje via Finnhub /quote.
+
+    Se já houver um snapshot de hoje (ex: criado mais cedo pelo job diário às
+    6h UTC), atualiza-o com o preço mais recente em vez de o deixar congelado
+    - sem isto, uma queda/subida intradiária (ex: GOOG a cair ~6%) nunca
+    aparecia na app até ao dia seguinte. Sujeito a QUOTE_REFRESH_COOLDOWN via
+    `stock.last_quote_at`, registado por tentativa (sucesso ou falha) para não
+    martelar a Finnhub a cada visita à página."""
+    last_quote = _as_utc(stock.last_quote_at)
+    if last_quote is not None and datetime.now(timezone.utc) - last_quote < QUOTE_REFRESH_COOLDOWN:
         return 0
+    stock.last_quote_at = datetime.now(timezone.utc)
+
     try:
         quote = await _finnhub_get("quote", {"symbol": stock.ticker})
     except Exception:
@@ -475,11 +497,31 @@ async def _record_latest_quote(db: AsyncSession, stock: Stock, existing_dates: s
     price = quote.get("c") if isinstance(quote, dict) else None
     if not price:
         return 0
+
+    today = datetime.now(timezone.utc).date()
+    if today in existing_dates:
+        row = (
+            await db.execute(
+                select(PriceSnapshot).where(PriceSnapshot.stock_id == stock.id, PriceSnapshot.date == today)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return 0
+        row.close = _dec(price)
+        high = _dec(quote.get("h"))
+        if high is not None and (row.high is None or high > row.high):
+            row.high = high
+        low = _dec(quote.get("l"))
+        if low is not None and (row.low is None or low < row.low):
+            row.low = low
+        await db.flush()
+        return 0
     db.add(PriceSnapshot(
         stock_id=stock.id, date=today,
         open=_dec(quote.get("o")), high=_dec(quote.get("h")),
         low=_dec(quote.get("l")), close=_dec(price), volume=None,
     ))
+    existing_dates.add(today)
     await db.flush()
     return 1
 

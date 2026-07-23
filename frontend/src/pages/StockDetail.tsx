@@ -47,6 +47,24 @@ const FUNDAMENTALS_DESCRIPTIONS: Record<string, string> = {
   'Rácio corrente': 'Ativo circulante a dividir pelo passivo circulante. Acima de 1 sugere que a empresa consegue cobrir as dívidas de curto prazo.',
 };
 
+// Texto relativo curto ("agora", "há 5 min", "há 3h", "há 2 dias") a partir de
+// stock.last_quote_at — deixa claro ao utilizador se o preço mostrado é de
+// agora ou de horas atrás (ver bug real: preço congelado sem indicação
+// nenhuma de quando foi obtido).
+function formatRelativeTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  const diffMs = Date.now() - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'agora mesmo';
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `há ${diffH}h`;
+  const diffDays = Math.floor(diffH / 24);
+  return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
+}
+
 function formatCriterionValue(criterion: { threshold_value: number | null; threshold_value_max: number | null; operator: string }): string {
   if (criterion.operator === 'between') {
     return `${formatDecimal(criterion.threshold_value)} - ${formatDecimal(criterion.threshold_value_max)}`;
@@ -128,6 +146,11 @@ export default function StockDetail() {
         </div>
         <div className="text-right">
           <PriceChange price={detail.last_price} changePct={detail.price_change_pct} currency={detail.stock.currency} />
+          {formatRelativeTime(detail.stock.last_quote_at) && (
+            <p className="text-xs text-gray-400 dark:text-slate-500">
+              Atualizado {formatRelativeTime(detail.stock.last_quote_at)}
+            </p>
+          )}
         </div>
       </div>
 

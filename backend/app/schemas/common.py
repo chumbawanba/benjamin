@@ -53,6 +53,10 @@ class StockOut(BaseModel):
     sector: str | None = None
     asset_type: str = "stock"
     exchange: str | None = None
+    # Última vez que se tentou obter a cotação intradiária (Finnhub /quote,
+    # sucesso ou falha) - frontend usa para mostrar "atualizado há X min" (ver
+    # market_data.ensure_fresh/QUOTE_REFRESH_COOLDOWN).
+    last_quote_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

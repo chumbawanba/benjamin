@@ -30,4 +30,10 @@ class Stock(Base):
     # snapshots, e sem isto tentava-se de novo em TODA a visita à página,
     # esgotando a quota partilhada da Twelve Data para as restantes ações.
     last_backfill_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Última vez que se tentou obter a cotação intradiária (Finnhub /quote),
+    # sucesso ou falha - governa QUOTE_REFRESH_COOLDOWN em market_data.py.
+    # Exposto no StockOut para o frontend mostrar "atualizado há X min" (ver
+    # bug real: sem isto o preço ficava congelado no valor da 1ª consulta do
+    # dia e não refletia quedas/subidas intradiárias, ex: GOOG a cair ~6%).
+    last_quote_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
