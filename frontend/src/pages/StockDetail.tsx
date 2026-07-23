@@ -54,6 +54,18 @@ function formatCriterionValue(criterion: { threshold_value: number | null; thres
   return `${criterion.operator} ${formatDecimal(criterion.threshold_value)}`;
 }
 
+// Frase curta derivada dos dados que já temos (sem chamada extra a nenhuma
+// API) - ajuda a confirmar que a ação/ETF adicionado é mesmo o pretendido,
+// sobretudo depois de escolher entre várias listagens parecidas na pesquisa.
+function describeStock(stock: StockDetailType['stock']): string {
+  const kind = stock.asset_type === 'etf' ? 'ETF' : 'Ação';
+  const parts = [kind];
+  if (stock.sector) parts.push(`do setor ${stock.sector}`);
+  if (stock.exchange) parts.push(`cotada em ${stock.exchange}`);
+  if (stock.currency) parts.push(`(${stock.currency})`);
+  return parts.join(' ');
+}
+
 export default function StockDetail() {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<StockDetailType | null>(null);
@@ -118,6 +130,17 @@ export default function StockDetail() {
           <PriceChange price={detail.last_price} changePct={detail.price_change_pct} currency={detail.stock.currency} />
         </div>
       </div>
+
+      <p className="text-sm text-gray-600 dark:text-slate-300 mb-4">{describeStock(detail.stock)}</p>
+
+      {detail.price_history.length === 0 && (
+        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl p-4 mb-4 text-sm text-amber-800 dark:text-amber-300">
+          Não há histórico de preços disponível para {detail.stock.ticker} nos fornecedores de dados que o Benjamin
+          usa — por isso os indicadores abaixo aparecem vazios. É comum acontecer quando o ticker corresponde a uma
+          listagem regional menos líquida (ex: uma entre várias listagens do mesmo ETF em bolsas diferentes na
+          Europa). Experimenta remover esta ação e procurar de novo, escolhendo outra bolsa na lista de resultados.
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
         <Sparkline

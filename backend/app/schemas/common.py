@@ -52,6 +52,7 @@ class StockOut(BaseModel):
     currency: str | None
     sector: str | None = None
     asset_type: str = "stock"
+    exchange: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -144,7 +145,8 @@ class StockDetailOut(BaseModel):
 class TickerSearchResult(BaseModel):
     ticker: str
     name: str | None
-    exchange: str | None
+    type: str | None = None
+    market_hint: str | None = None
 
 
 class NewsItemOut(BaseModel):

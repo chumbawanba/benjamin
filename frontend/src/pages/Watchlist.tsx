@@ -142,28 +142,43 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
           {results.length === 0 ? (
             <p className="text-xs text-gray-400 dark:text-slate-500 mb-2">Sem resultados.</p>
           ) : (
-            results.map((r) => {
-              const already = watchedTickers.has(r.ticker);
-              return (
-                <li
-                  key={r.ticker}
-                  className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-lg shadow-sm px-3 py-2 flex items-center justify-between text-sm gap-2"
-                >
-                  <div className="min-w-0">
-                    <span className="font-semibold text-gray-900 dark:text-slate-100">{r.ticker}</span>
-                    <span className="text-gray-500 dark:text-slate-400 ml-2">{r.name}</span>
-                    {r.exchange && <span className="text-gray-400 dark:text-slate-500 ml-2 text-xs">{r.exchange}</span>}
-                  </div>
-                  <button
-                    onClick={() => handleAddTicker(r.ticker)}
-                    disabled={already || addingTicker === r.ticker}
-                    className="text-navy-600 dark:text-navy-400 font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            <>
+              {results.length > 3 && (
+                <p className="text-xs text-gray-400 dark:text-slate-500 mb-1">
+                  Vários resultados costumam ser o mesmo instrumento cotado em bolsas diferentes — escolhe a que
+                  corresponde ao teu mercado/corretora (indicado a seguir ao ticker).
+                </p>
+              )}
+              {results.map((r) => {
+                const already = watchedTickers.has(r.ticker);
+                return (
+                  <li
+                    key={r.ticker}
+                    className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-lg shadow-sm px-3 py-2 flex items-center justify-between text-sm gap-2"
                   >
-                    {already ? 'Já na lista' : 'Adicionar'}
-                  </button>
-                </li>
-              );
-            })
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-gray-900 dark:text-slate-100">{r.ticker}</span>
+                        {r.market_hint && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400 shrink-0">
+                            {r.market_hint}
+                          </span>
+                        )}
+                        {r.type && <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">{r.type}</span>}
+                      </div>
+                      <p className="text-gray-500 dark:text-slate-400 truncate">{r.name}</p>
+                    </div>
+                    <button
+                      onClick={() => handleAddTicker(r.ticker)}
+                      disabled={already || addingTicker === r.ticker}
+                      className="text-navy-600 dark:text-navy-400 font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {already ? 'Já na lista' : 'Adicionar'}
+                    </button>
+                  </li>
+                );
+              })}
+            </>
           )}
         </ul>
       )}

@@ -131,9 +131,41 @@ async def get_market_pulse(news_limit: int = 8) -> dict:
     return {"indices": indices, "news": news}
 
 
+# Sufixo do ticker -> mercado/bolsa, para ajudar a escolher entre várias
+# listagens do mesmo instrumento (ex: um ETF UCITS cotado em 8+ bolsas
+# europeias em simultâneo). Aproximação a partir do sufixo devolvido pela
+# Finnhub /search - a própria Finnhub não devolve o nome da bolsa nesse
+# endpoint, só o `type` do instrumento (ver _finnhub_get("search", ...)),
+# por isso isto é best-effort e não cobre todos os sufixos possíveis.
+_EXCHANGE_SUFFIX_HINTS: dict[str, str] = {
+    "L": "Londres", "DE": "Alemanha (Xetra)", "F": "Frankfurt", "SG": "Estugarda",
+    "HM": "Hamburgo", "MU": "Munique", "BE": "Berlim", "DU": "Dusseldorf",
+    "HA": "Hanôver", "PA": "Paris", "AS": "Amesterdão", "BR": "Bruxelas",
+    "LS": "Lisboa", "MI": "Milão", "MC": "Madrid", "SW": "Suíça", "VX": "Suíça (SIX)",
+    "TO": "Toronto", "HK": "Hong Kong", "T": "Tóquio", "AX": "Austrália",
+    "SA": "Brasil (B3)", "MX": "México",
+}
+
+
+def _market_hint_from_ticker(ticker: str) -> str | None:
+    """Ex: 'VWCE.LS' -> 'Lisboa'; 'AAPL' (sem sufixo) -> 'EUA'."""
+    if "." not in ticker:
+        return "EUA"
+    suffix = ticker.rsplit(".", 1)[-1].upper()
+    return _EXCHANGE_SUFFIX_HINTS.get(suffix, suffix)
+
+
 async def search_tickers(query: str, limit: int = 8) -> list[dict]:
     """Pesquisa tickers por nome ou símbolo via Finnhub /search. Nunca lança
-    exceção — devolve lista vazia se a pesquisa falhar (ex: sem rede, key inválida)."""
+    exceção — devolve lista vazia se a pesquisa falhar (ex: sem rede, key inválida).
+
+    Para instrumentos cross-listados em várias bolsas (comum em ETFs UCITS
+    europeus - ex: um único fundo listado em 8+ bolsas), a Finnhub devolve
+    todas as listagens misturadas, o que dificulta escolher a certa. Prioriza-
+    se listagens sem sufixo de bolsa (tipicamente EUA, mais prováveis de ter
+    cotação/histórico disponível nos fornecedores usados, Finnhub/Twelve Data)
+    antes das restantes, e devolve-se `market_hint` para o frontend mostrar
+    a bolsa de cada opção."""
     query = query.strip()
     if not query:
         return []
@@ -143,16 +175,18 @@ async def search_tickers(query: str, limit: int = 8) -> list[dict]:
         logger.warning("Pesquisa de tickers falhou para '%s'", query, exc_info=True)
         return []
     out = []
-    for r in (data.get("result") or [])[:limit]:
+    for r in data.get("result") or []:
         symbol = r.get("symbol")
         if not symbol:
             continue
         out.append({
             "ticker": symbol,
             "name": r.get("description"),
-            "exchange": r.get("type"),
+            "type": r.get("type"),
+            "market_hint": _market_hint_from_ticker(symbol),
         })
-    return out
+    out.sort(key=lambda r: ("." in r["ticker"], r["ticker"]))
+    return out[:limit]
 
 
 async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | None:

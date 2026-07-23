@@ -7,6 +7,7 @@ export interface Stock {
   currency: string | null;
   sector: string | null;
   asset_type: 'stock' | 'etf';
+  exchange: string | null;
 }
 
 export interface EvaluationSummary {
@@ -87,7 +88,8 @@ export interface Evaluation extends EvaluationSummary {
 export interface TickerSearchResult {
   ticker: string;
   name: string | null;
-  exchange: string | null;
+  type: string | null;
+  market_hint: string | null;
 }
 
 export interface MetricInfo {

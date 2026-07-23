@@ -48,6 +48,59 @@ async def test_backfill_profile_survives_finnhub_failure(db_session):
     assert stock.name is None
 
 
+def test_market_hint_from_ticker_known_suffix():
+    assert market_data._market_hint_from_ticker("VWCE.LS") == "Lisboa"
+
+
+def test_market_hint_from_ticker_unknown_suffix_falls_back_to_raw():
+    assert market_data._market_hint_from_ticker("XYZ.ZZ") == "ZZ"
+
+
+def test_market_hint_from_ticker_no_suffix_is_eua():
+    assert market_data._market_hint_from_ticker("AAPL") == "EUA"
+
+
+async def test_search_tickers_prioritizes_listings_without_exchange_suffix(db_session):
+    """Um ETF UCITS cross-listado (ex: VWCE) devolve várias entradas com
+    sufixo de bolsa (.DE, .MI, ...) e nenhuma óbvia - a listagem sem sufixo
+    (tipicamente EUA, mais provável de ter histórico nos fornecedores usados)
+    deve vir primeiro, para não obrigar o utilizador a decifrar qual escolher."""
+    fake_response = {
+        "result": [
+            {"symbol": "VWCE.MI", "description": "VANGUARD FTSE ALL-WORLD...,MI", "type": "ETP"},
+            {"symbol": "VWCE.DE", "description": "VANGUARD FTSE ALL-WORLD...,DE", "type": "ETP"},
+            {"symbol": "VWCE", "description": "VANGUARD FTSE ALL-WORLD ETF", "type": "ETP"},
+        ],
+    }
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=fake_response)):
+        results = await market_data.search_tickers("vwce")
+
+    assert results[0]["ticker"] == "VWCE"
+    assert results[0]["market_hint"] == "EUA"
+
+
+async def test_search_tickers_includes_type_and_market_hint(db_session):
+    fake_response = {
+        "result": [{"symbol": "AAPL", "description": "Apple Inc.", "type": "Common Stock"}],
+    }
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=fake_response)):
+        results = await market_data.search_tickers("apple")
+
+    assert results == [{
+        "ticker": "AAPL", "name": "Apple Inc.", "type": "Common Stock", "market_hint": "EUA",
+    }]
+
+
+async def test_search_tickers_respects_limit_after_sorting(db_session):
+    fake_response = {
+        "result": [{"symbol": f"T{i}.DE", "description": f"Ticker {i}", "type": "ETP"} for i in range(10)],
+    }
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=fake_response)):
+        results = await market_data.search_tickers("t", limit=3)
+
+    assert len(results) == 3
+
+
 async def test_validate_and_create_stock_accepts_etf_when_stock_profile_empty(db_session):
     """SPY não é reconhecido por /stock/profile2 (endpoint de empresa), mas
     /etf/profile devolve dados - deve aceitar-se como ETF em vez de rejeitar."""
