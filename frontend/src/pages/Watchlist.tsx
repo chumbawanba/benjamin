@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { TickerSearchResult, WatchlistItem } from '../api/types';
 import PriceChange from '../components/PriceChange';
+import { formatRelativeTime } from '../utils/format';
 
 const POPULAR_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B'];
 
@@ -229,6 +230,11 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
                     <span className="text-sm">
                       <PriceChange price={item.last_price} changePct={item.price_change_pct} currency={item.stock.currency} />
                     </span>
+                    {formatRelativeTime(item.stock.last_quote_at) && (
+                      <span className="text-xs text-gray-400 dark:text-slate-500">
+                        {formatRelativeTime(item.stock.last_quote_at)}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-slate-400">{item.stock.name ?? '—'}</p>
                 </div>

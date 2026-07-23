@@ -175,6 +175,84 @@ async def test_refresh_fundamentals_skips_stock_metric_for_etf(db_session):
     assert rows == []
 
 
+async def test_refresh_fundamentals_skips_retry_within_cooldown(db_session):
+    """Um símbolo que a Finnhub rejeita sempre em /stock/metric (ex: sem
+    cobertura de fundamentais) nunca cria um FundamentalsSnapshot, logo nunca
+    satisfaz o `existing` - sem FUNDAMENTALS_RETRY_COOLDOWN, tentava-se de
+    novo em toda a chamada."""
+    from app.models import FundamentalsSnapshot
+
+    stock = Stock(
+        ticker="AAPL", currency="USD",
+        last_fundamentals_attempt_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        await market_data.refresh_fundamentals(db_session, stock)  # não deve lançar/chamar a Finnhub
+
+    rows = (await db_session.execute(select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id))).scalars().all()
+    assert rows == []
+
+
+async def test_refresh_fundamentals_retries_after_cooldown_expires(db_session):
+    """Passado o FUNDAMENTALS_RETRY_COOLDOWN, volta a tentar-se - o cooldown
+    protege a Finnhub mas não bloqueia para sempre."""
+    stock = Stock(
+        ticker="MSFT", currency="USD",
+        last_fundamentals_attempt_at=datetime.now(timezone.utc) - market_data.FUNDAMENTALS_RETRY_COOLDOWN - timedelta(minutes=1),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    finnhub_mock = AsyncMock(return_value={"metric": {"roeTTM": 33.13, "netProfitMarginTTM": 39.34, "revenueGrowthTTMYoy": 17.87}})
+    with patch("app.services.market_data._finnhub_get", new=finnhub_mock):
+        await market_data.refresh_fundamentals(db_session, stock)
+
+    finnhub_mock.assert_called_once_with("stock/metric", {"symbol": "MSFT", "metric": "all"})
+    assert stock.last_fundamentals_attempt_at is not None
+
+
+async def test_ensure_fresh_still_refreshes_fundamentals_when_history_sufficient(db_session):
+    """Bug real: MSFT numa watchlist há semanas (histórico já suficiente)
+    nunca mais tinha ROE/margem/crescimento atualizados - refresh_fundamentals
+    só corria dentro do ramo de backfill do ensure_fresh, nunca percorrido de
+    novo por uma ação já 'fresca'. Confirma que, mesmo com histórico
+    suficiente, o snapshot de fundamentais de HOJE é criado com os campos
+    confirmados no payload real da Finnhub (ver comentário no topo do
+    ficheiro)."""
+    stock = Stock(ticker="MSFT", name="Microsoft Corp", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+    today = datetime.now(timezone.utc).date()
+    for i in range(market_data.MIN_HISTORY_ROWS):
+        db_session.add(PriceSnapshot(
+            stock_id=stock.id, date=today - timedelta(days=i), close=Decimal("397.75"),
+        ))
+    await db_session.commit()
+
+    metric_payload = {
+        "metric": {
+            "peTTM": 23.71, "epsTTM": 16.79, "totalDebt/totalEquityAnnual": 0.26,
+            "currentDividendYieldTTM": 0.87, "marketCapitalization": 2968700,
+            "roeTTM": 33.13, "netProfitMarginTTM": 39.34, "revenueGrowthTTMYoy": 17.87,
+        }
+    }
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=[{"c": 397.75}, metric_payload])):
+        await market_data.ensure_fresh(db_session, stock)
+
+    from app.models import FundamentalsSnapshot
+    row = (
+        await db_session.execute(
+            select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id, FundamentalsSnapshot.date == today)
+        )
+    ).scalar_one()
+    assert row.roe == Decimal("33.13")
+    assert row.net_margin == Decimal("39.34")
+    assert row.revenue_growth == Decimal("17.87")
+
+
 async def test_get_price_change_computes_pct(db_session):
     stock = Stock(ticker="NVDA")
     db_session.add(stock)
@@ -240,9 +318,12 @@ async def test_ensure_fresh_retries_when_recent_but_insufficient_history(db_sess
 async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session):
     """Com histórico completo (>= MIN_HISTORY_ROWS) e um snapshot recente, o
     curto-circuito de freshness do BACKFILL continua a funcionar - não deve
-    voltar a chamar a Twelve Data. Mas a cotação de hoje ainda é atualizada via
-    Finnhub (ver test_ensure_fresh_still_refreshes_quote_when_history_sufficient
-    - este é o comportamento novo que resolve o preço ficar congelado)."""
+    voltar a chamar a Twelve Data. Mas a cotação E os fundamentais de hoje
+    ainda são atualizados via Finnhub (ver
+    test_ensure_fresh_still_refreshes_quote_when_history_sufficient e
+    test_ensure_fresh_still_refreshes_fundamentals_when_history_sufficient -
+    este é o comportamento novo que resolve preço/fundamentais ficarem
+    congelados)."""
     stock = Stock(ticker="AAPL", name="Apple Inc.", currency="USD")
     db_session.add(stock)
     await db_session.flush()
@@ -258,7 +339,9 @@ async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session)
          patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
         await market_data.ensure_fresh(db_session, stock)  # não deve lançar
 
-    finnhub_mock.assert_called_once_with("quote", {"symbol": "AAPL"})
+    finnhub_mock.assert_any_call("quote", {"symbol": "AAPL"})
+    finnhub_mock.assert_any_call("stock/metric", {"symbol": "AAPL", "metric": "all"})
+    assert finnhub_mock.call_count == 2
 
 
 async def test_ensure_fresh_still_refreshes_quote_when_history_sufficient(db_session):
@@ -291,10 +374,15 @@ async def test_ensure_fresh_still_refreshes_quote_when_history_sufficient(db_ses
 
 async def test_ensure_fresh_skips_quote_refresh_within_cooldown(db_session):
     """Duas visitas seguidas à mesma ação dentro de QUOTE_REFRESH_COOLDOWN não
-    devem martelar a Finnhub - só passado o cooldown é que se tenta de novo."""
+    devem martelar a Finnhub - só passado o cooldown é que se tenta de novo.
+    last_fundamentals_attempt_at também recente, para isolar este teste ao
+    comportamento do cooldown de cotação especificamente (ver
+    test_refresh_fundamentals_skips_retry_within_cooldown para o equivalente
+    dos fundamentais)."""
     stock = Stock(
         ticker="AAPL", name="Apple Inc.", currency="USD",
         last_quote_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        last_fundamentals_attempt_at=datetime.now(timezone.utc) - timedelta(minutes=1),
     )
     db_session.add(stock)
     await db_session.flush()

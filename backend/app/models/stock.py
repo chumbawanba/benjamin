@@ -36,4 +36,15 @@ class Stock(Base):
     # bug real: sem isto o preço ficava congelado no valor da 1ª consulta do
     # dia e não refletia quedas/subidas intradiárias, ex: GOOG a cair ~6%).
     last_quote_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Última vez que se tentou obter fundamentais (Finnhub /stock/metric),
+    # sucesso ou falha - governa FUNDAMENTALS_RETRY_COOLDOWN em market_data.py.
+    # Bug real corrigido: refresh_fundamentals só corria dentro do ramo de
+    # backfill do ensure_fresh, que uma ação madura (histórico já suficiente,
+    # ex: MSFT numa watchlist há semanas) nunca mais volta a percorrer - os
+    # fundamentais (P/E, ROE, margens...) ficavam congelados no valor da
+    # primeira vez que a ação foi adicionada, para sempre. Este campo permite
+    # chamar refresh_fundamentals sempre, com proteção contra tentativas
+    # repetidas quando a Finnhub rejeita o símbolo (mesmo padrão de
+    # last_backfill_attempt_at/last_quote_at).
+    last_fundamentals_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

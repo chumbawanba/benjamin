@@ -7,7 +7,11 @@ bloqueia pedidos com 429 de forma imprevisível e persistente. Ver HANDOFF.md.
 Nomes dos campos de `/stock/metric` confirmados com payload real (MSFT,
 2026-07-17): peTTM, currentDividendYieldTTM/dividendYieldIndicatedAnnual (em
 percentagem, daí a divisão por 100), marketCapitalization (em milhões, daí a
-multiplicação por 1_000_000), epsTTM, totalDebt/totalEquityAnnual.
+multiplicação por 1_000_000), epsTTM, totalDebt/totalEquityAnnual. Confirmados
+de novo em 2026-07-23 (MSFT): roeTTM, netProfitMarginTTM, revenueGrowthTTMYoy
+existem mesmo no payload - a razão de aparecerem vazios na app não era nome de
+campo errado, era refresh_fundamentals nunca ser chamado para ações maduras
+(ver ensure_fresh/FUNDAMENTALS_RETRY_COOLDOWN).
 """
 import logging
 import uuid
@@ -37,6 +41,7 @@ FRESHNESS_DAYS = 3
 MIN_HISTORY_ROWS = 200  # cobre SMA_200; abaixo disto tenta backfill via Twelve Data
 BACKFILL_RETRY_COOLDOWN = timedelta(hours=6)  # ver ensure_fresh
 QUOTE_REFRESH_COOLDOWN = timedelta(minutes=15)  # ver ensure_fresh/_record_latest_quote
+FUNDAMENTALS_RETRY_COOLDOWN = timedelta(hours=6)  # ver refresh_fundamentals
 HTTP_TIMEOUT = 10.0
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
@@ -327,7 +332,15 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     rows, logo nunca satisfaz `count >= MIN_HISTORY_ROWS` e cai sempre no ramo
     de backfill abaixo, gated por BACKFILL_RETRY_COOLDOWN (protege a quota
     partilhada da Twelve Data/Finnhub) - nunca chega a tentar o refresh de
-    cotação a cada 15min, que só se aplica a ações já com histórico OK."""
+    cotação a cada 15min, que só se aplica a ações já com histórico OK.
+
+    Fundamentais (refresh_fundamentals) são sempre tentados, em ambos os
+    ramos - bug real corrigido em 2026-07-23: antes só corriam dentro do ramo
+    de backfill abaixo, que uma ação madura (histórico já suficiente) nunca
+    mais volta a percorrer, deixando P/E, ROE, margens, etc. congelados no
+    valor da primeira vez que a ação foi adicionada. refresh_fundamentals tem
+    o seu próprio cooldown interno (FUNDAMENTALS_RETRY_COOLDOWN), por isso
+    chamá-lo sempre aqui é seguro/barato."""
     await _backfill_profile(db, stock)
     latest = (
         await db.execute(
@@ -349,6 +362,7 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
             )).scalars().all()
         )
         await _record_latest_quote(db, stock, existing_dates)
+        await refresh_fundamentals(db, stock)
         return
 
     last_attempt = _as_utc(stock.last_backfill_attempt_at)
@@ -527,6 +541,17 @@ async def _record_latest_quote(db: AsyncSession, stock: Stock, existing_dates: s
 
 
 async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
+    """Regista os fundamentais de hoje (Finnhub /stock/metric), uma vez por
+    dia por ação (`existing` abaixo). Chamado sempre que ensure_fresh corre -
+    incluindo para ações já com histórico de preço suficiente - para que P/E,
+    ROE, margens, etc. continuem a atualizar-se (ex: após resultados
+    trimestrais) em vez de ficarem congeladas no valor da primeira vez que a
+    ação foi adicionada (bug real corrigido em 2026-07-23).
+
+    FUNDAMENTALS_RETRY_COOLDOWN protege contra um símbolo que a Finnhub
+    rejeita sempre (ex: sem cobertura de fundamentais, ou fora do plano
+    gratuito) - sem isto, sem nunca haver `existing`, tentava-se de novo em
+    TODA a visita à página."""
     if stock.asset_type == "etf":
         # /stock/metric é orientado a acções - a Finnhub devolve sempre vazio
         # para ETFs, por isso nem vale a pena gastar o pedido.
@@ -539,6 +564,10 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
     ).scalar_one_or_none()
     if existing:
         return
+    last_attempt = _as_utc(stock.last_fundamentals_attempt_at)
+    if last_attempt is not None and datetime.now(timezone.utc) - last_attempt < FUNDAMENTALS_RETRY_COOLDOWN:
+        return
+    stock.last_fundamentals_attempt_at = datetime.now(timezone.utc)
     try:
         data = await _finnhub_get("stock/metric", {"symbol": stock.ticker, "metric": "all"})
     except Exception:
@@ -562,7 +591,9 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
         # conversão (ex: revenueGrowthTTMYoy=12.3 significa 12.3%).
         revenue_growth=_dec(metric.get("revenueGrowthTTMYoy") or metric.get("revenueGrowth3Y")),
         net_margin=_dec(metric.get("netProfitMarginTTM") or metric.get("netProfitMarginAnnual")),
-        roe=_dec(metric.get("roeTTM") or metric.get("roeAnnual")),
+        # "roeAnnual" não existe no payload real (confirmado 2026-07-23,
+        # MSFT) - "roeRfy" (rolling four-year) é o fallback real mais próximo.
+        roe=_dec(metric.get("roeTTM") or metric.get("roeRfy")),
         current_ratio=_dec(metric.get("currentRatioAnnual") or metric.get("currentRatioQuarterly")),
     ))
     await db.flush()

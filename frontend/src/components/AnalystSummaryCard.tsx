@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import { AnalystPrompt, AnalystSummary } from '../api/types';
+import { formatRelativeTime } from '../utils/format';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
 }
+
+// Acima disto o report é tratado como desatualizado (aviso visível) - a
+// atualização é sempre manual (nunca automática, ver docstring abaixo), por
+// isso é fácil o report ficar preso a preços de horas/dias atrás enquanto a
+// Watchlist já mostra o preço em tempo real, criando números contraditórios
+// na mesma sessão (ex: report diz GOOGL -1.4%, Watchlist mostra -8%).
+const STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
 // Resumo estilo analista (Benjamin) gerado por IA (watchlist + mercado geral) —
 // substitui os cartões de contagem Comprar/Vender/Manter no topo do Overview.
@@ -155,6 +163,12 @@ export default function AnalystSummaryCard() {
         <p className="text-sm text-gray-400 dark:text-slate-500">A carregar…</p>
       ) : data?.summary ? (
         <>
+          {data.generated_at && Date.now() - new Date(data.generated_at).getTime() > STALE_THRESHOLD_MS && (
+            <p className="text-xs bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-300 rounded-lg px-3 py-2 mb-2">
+              Este report foi gerado {formatRelativeTime(data.generated_at)} — os preços e sinais podem já ter
+              mudado desde então (a watchlist mostra sempre o valor atual). Clica em "↻" acima para atualizar.
+            </p>
+          )}
           <p className="text-sm text-gray-700 dark:text-slate-300 whitespace-pre-line">{data.summary}</p>
           <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-2 leading-snug">
             Gerado por IA{data.generated_at ? ` em ${formatDate(data.generated_at)}` : ''} — pode conter erros. Não é

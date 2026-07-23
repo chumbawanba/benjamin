@@ -5,6 +5,7 @@ import { StockDetail as StockDetailType } from '../api/types';
 import PriceChange from '../components/PriceChange';
 import RecommendationBadge from '../components/RecommendationBadge';
 import Sparkline from '../components/Sparkline';
+import { formatRelativeTime } from '../utils/format';
 
 // Campos Decimal do backend (pydantic) chegam como string em JSON, não number
 // — nunca assumir .toFixed() diretamente sem passar por Number() primeiro.
@@ -19,51 +20,25 @@ function formatDecimal(value: number | string | null | undefined, digits = 2): s
   return n === null ? '—' : n.toFixed(digits);
 }
 
-function formatPercentField(value: number | string | null | undefined, digits = 2): string {
-  const n = toNum(value);
-  return n === null ? '—' : `${n.toFixed(digits)}%`;
-}
-
 function formatIndicatorValue(key: string, value: number | null): string {
   const n = toNum(value);
   if (n === null) return '—';
   if (key === 'DIVIDEND_YIELD') return `${(n * 100).toFixed(2)}%`;
   if (key === 'MARKET_CAP') return `$${n.toFixed(1)}B`;
+  // ROE/NET_MARGIN/REVENUE_GROWTH já vêm em percentagem direta do backend
+  // (ver indicators_core.py) — sem o "%" ficava ambíguo (ex: "15.20" podia
+  // ler-se como um rácio absoluto).
+  if (key === 'ROE' || key === 'NET_MARGIN' || key === 'REVENUE_GROWTH') return `${n.toFixed(2)}%`;
   return n.toFixed(2);
 }
 
-// Descrições curtas para tooltip (title), mesmo padrão já usado nos
-// indicadores técnicos (ver ind.description mais abaixo) — os fundamentais
-// não vêm do backend com descrição porque são campos fixos, não uma lista
-// configurável como os indicadores (ver INDICATORS em indicators_core.py).
-const FUNDAMENTALS_DESCRIPTIONS: Record<string, string> = {
-  'P/E': 'Preço da ação a dividir pelo lucro por ação (EPS). Quanto mais baixo, mais "barata" a ação parece face aos lucros atuais.',
-  EPS: 'Lucro por ação — lucro líquido da empresa a dividir pelo número total de ações.',
-  'Debt/Equity': 'Dívida total a dividir pelo capital próprio. Quanto mais alto, mais a empresa depende de dívida para se financiar.',
-  'Dividend Yield': 'Dividendo anual a dividir pelo preço da ação, em percentagem — quanto a ação "paga" em dividendos por ano.',
-  'Crescimento receita': 'Variação da receita (vendas) face ao ano anterior, em percentagem. Mostra se o negócio está a crescer.',
-  'Margem líquida': 'Lucro líquido a dividir pela receita, em percentagem. Quanto mais alto, mais a empresa retém de cada euro/dólar vendido.',
-  ROE: 'Return on Equity — lucro líquido a dividir pelo capital próprio, em percentagem. Mede quão eficiente a empresa é a gerar lucro com o dinheiro dos acionistas.',
-  'Rácio corrente': 'Ativo circulante a dividir pelo passivo circulante. Acima de 1 sugere que a empresa consegue cobrir as dívidas de curto prazo.',
-};
-
-// Texto relativo curto ("agora", "há 5 min", "há 3h", "há 2 dias") a partir de
-// stock.last_quote_at — deixa claro ao utilizador se o preço mostrado é de
-// agora ou de horas atrás (ver bug real: preço congelado sem indicação
-// nenhuma de quando foi obtido).
-function formatRelativeTime(iso: string | null): string | null {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return null;
-  const diffMs = Date.now() - then;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'agora mesmo';
-  if (diffMin < 60) return `há ${diffMin} min`;
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `há ${diffH}h`;
-  const diffDays = Math.floor(diffH / 24);
-  return `há ${diffDays} dia${diffDays > 1 ? 's' : ''}`;
-}
+// Rácio corrente não está na lista de indicadores configuráveis
+// (INDICATORS em indicators_core.py não o inclui - não é avaliável em
+// critérios de estratégia), por isso não aparece na grelha "Indicadores"
+// como os restantes fundamentais (P/E, EPS, ROE, etc. - esses vêm todos de
+// lá, evitando mostrar os mesmos números duas vezes na página).
+const CURRENT_RATIO_DESCRIPTION =
+  'Ativo circulante a dividir pelo passivo circulante. Acima de 1 sugere que a empresa consegue cobrir as dívidas de curto prazo.';
 
 function formatCriterionValue(criterion: { threshold_value: number | null; threshold_value_max: number | null; operator: string }): string {
   if (criterion.operator === 'between') {
@@ -192,6 +167,17 @@ export default function StockDetail() {
             </p>
           </div>
         ))}
+        {detail.fundamentals && (
+          <div
+            title={CURRENT_RATIO_DESCRIPTION}
+            className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-3"
+          >
+            <p className="text-xs text-gray-500 dark:text-slate-400">RÁCIO CORRENTE</p>
+            <p className="text-lg font-semibold text-gray-900 dark:text-slate-100">
+              {formatDecimal(detail.fundamentals.current_ratio)}
+            </p>
+          </div>
+        )}
       </div>
 
       {!detail.fundamentals && detail.stock.asset_type === 'etf' && (
@@ -199,51 +185,6 @@ export default function StockDetail() {
           Fundamentais de empresa (P/E, ROE, margens…) não se aplicam a ETFs — só os indicadores de preço acima
           (RSI, médias móveis) são avaliáveis em critérios de estratégia para este tipo de ativo.
         </p>
-      )}
-
-      {detail.fundamentals && (
-        <>
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Fundamentais</h2>
-          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-6 grid grid-cols-2 gap-3 text-sm">
-            <div title={FUNDAMENTALS_DESCRIPTIONS['P/E']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">P/E</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.pe_ratio)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS.EPS}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">EPS</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.eps)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS['Debt/Equity']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Debt/Equity</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.debt_to_equity)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS['Dividend Yield']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Dividend Yield</p>
-              <p className="text-gray-900 dark:text-slate-100">
-                {(() => {
-                  const y = toNum(detail.fundamentals!.dividend_yield);
-                  return y === null ? '—' : `${(y * 100).toFixed(2)}%`;
-                })()}
-              </p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS['Crescimento receita']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Crescimento receita</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.revenue_growth)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS['Margem líquida']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Margem líquida</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.net_margin)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS.ROE}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">ROE</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatPercentField(detail.fundamentals.roe)}</p>
-            </div>
-            <div title={FUNDAMENTALS_DESCRIPTIONS['Rácio corrente']}>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Rácio corrente</p>
-              <p className="text-gray-900 dark:text-slate-100">{formatDecimal(detail.fundamentals.current_ratio)}</p>
-            </div>
-          </div>
-        </>
       )}
 
       <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Última avaliação</h2>
