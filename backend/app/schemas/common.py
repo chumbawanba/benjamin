@@ -51,6 +51,7 @@ class StockOut(BaseModel):
     name: str | None
     currency: str | None
     sector: str | None = None
+    asset_type: str = "stock"
 
     model_config = {"from_attributes": True}
 

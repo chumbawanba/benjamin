@@ -104,7 +104,14 @@ export default function StockDetail() {
 
       <div className="flex items-baseline justify-between mt-2 mb-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">{detail.stock.ticker}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">{detail.stock.ticker}</h1>
+            {detail.stock.asset_type === 'etf' && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
+                ETF
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-slate-400">{detail.stock.name ?? '—'}</p>
         </div>
         <div className="text-right">
@@ -140,6 +147,13 @@ export default function StockDetail() {
           </div>
         ))}
       </div>
+
+      {!detail.fundamentals && detail.stock.asset_type === 'etf' && (
+        <p className="text-xs text-gray-400 dark:text-slate-500 mb-6">
+          Fundamentais de empresa (P/E, ROE, margens…) não se aplicam a ETFs — só os indicadores de preço acima
+          (RSI, médias móveis) são avaliáveis em critérios de estratégia para este tipo de ativo.
+        </p>
+      )}
 
       {detail.fundamentals && (
         <>

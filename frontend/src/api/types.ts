@@ -6,6 +6,7 @@ export interface Stock {
   name: string | null;
   currency: string | null;
   sector: string | null;
+  asset_type: 'stock' | 'etf';
 }
 
 export interface EvaluationSummary {

@@ -158,10 +158,12 @@ async def search_tickers(query: str, limit: int = 8) -> list[dict]:
 async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | None:
     """Devolve a stock existente ou cria-a.
 
-    Tenta validar/enriquecer via Finnhub (stock/profile2). Se o pedido falhar
-    (rede, rate limit, key inválida, etc.) aceita o ticker na mesma sem metadados
-    — só rejeita quando a Finnhub responde com sucesso a dizer que o símbolo
-    não existe (perfil vazio)."""
+    Tenta validar/enriquecer via Finnhub - primeiro como acção (stock/profile2);
+    se essa vier vazia (símbolo não é uma acção), tenta como ETF (etf/profile)
+    antes de desistir. Se algum pedido falhar (rede, rate limit, key inválida)
+    aceita o ticker na mesma sem metadados — só rejeita quando a Finnhub
+    responde com sucesso a dizer que o símbolo não existe em nenhum dos dois
+    formatos."""
     ticker = ticker.upper().strip()
     if not ticker:
         return None
@@ -169,9 +171,9 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
     if existing:
         return existing
 
-    profile: dict | None
+    asset_type = "stock"
     try:
-        profile = await _finnhub_get("stock/profile2", {"symbol": ticker})
+        profile: dict | None = await _finnhub_get("stock/profile2", {"symbol": ticker})
     except Exception:
         logger.warning(
             "Finnhub indisponível a validar '%s' — a adicionar sem metadados por agora",
@@ -180,7 +182,28 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
         profile = None
 
     if profile is not None and not profile:
-        return None  # perfil vazio = símbolo não existe
+        # Não é uma acção reconhecida - tenta como ETF antes de rejeitar.
+        try:
+            etf_data = await _finnhub_get("etf/profile", {"symbol": ticker})
+        except Exception:
+            logger.warning(
+                "Finnhub indisponível a validar '%s' como ETF — a adicionar sem metadados por agora",
+                ticker, exc_info=True,
+            )
+            etf_data = None
+        if etf_data is None:
+            profile = None  # Finnhub ficou inacessível a meio - aceita sem metadados
+        else:
+            # Nomes de campos do /etf/profile não confirmados com payload real
+            # (ao contrário de stock/profile2 e stock/metric, ver topo do
+            # ficheiro) - a documentação pública da Finnhub sugere a forma
+            # {"profile": {...}}. Se 'name'/'currency' vierem sempre vazios
+            # para ETFs válidos, confirmar o formato real e ajustar aqui.
+            etf_profile = etf_data.get("profile") or etf_data
+            if not etf_profile:
+                return None  # nem acção nem ETF - símbolo não existe
+            profile = etf_profile
+            asset_type = "etf"
 
     profile = profile or {}
     stock = Stock(
@@ -189,6 +212,7 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
         exchange=profile.get("exchange"),
         sector=profile.get("finnhubIndustry"),
         currency=profile.get("currency"),
+        asset_type=asset_type,
     )
     db.add(stock)
     await db.flush()
@@ -196,7 +220,8 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
 
 
 async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
-    """Tenta preencher nome/exchange/sector/currency em falta.
+    """Tenta preencher nome/exchange/sector/currency em falta (acção ou ETF,
+    mesmo fallback de validate_and_create_stock).
 
     Cobre o caso em que `validate_and_create_stock` aceitou o ticker sem
     metadados (Finnhub indisponível/rate-limited nesse momento) — sem isto o
@@ -212,12 +237,27 @@ async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
             stock.ticker, exc_info=True,
         )
         return
+
+    asset_type = "stock"
+    if not profile:
+        try:
+            etf_data = await _finnhub_get("etf/profile", {"symbol": stock.ticker})
+        except Exception:
+            logger.warning(
+                "Finnhub indisponível a preencher perfil de %s como ETF — tenta-se novamente mais tarde",
+                stock.ticker, exc_info=True,
+            )
+            return
+        profile = (etf_data.get("profile") or etf_data) if etf_data else {}
+        asset_type = "etf"
+
     if not profile:
         return
     stock.name = profile.get("name")
     stock.exchange = profile.get("exchange")
     stock.sector = profile.get("finnhubIndustry")
     stock.currency = profile.get("currency")
+    stock.asset_type = asset_type
     await db.flush()
 
 
@@ -344,6 +384,10 @@ async def _record_latest_quote(db: AsyncSession, stock: Stock, existing_dates: s
 
 
 async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
+    if stock.asset_type == "etf":
+        # /stock/metric é orientado a acções - a Finnhub devolve sempre vazio
+        # para ETFs, por isso nem vale a pena gastar o pedido.
+        return
     today = datetime.now(timezone.utc).date()
     existing = (
         await db.execute(select(FundamentalsSnapshot).where(

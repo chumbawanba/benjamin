@@ -206,6 +206,11 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
                     <Link to={`/stocks/${item.id}`} className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400">
                       {item.stock.ticker}
                     </Link>
+                    {item.stock.asset_type === 'etf' && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
+                        ETF
+                      </span>
+                    )}
                     <span className="text-sm">
                       <PriceChange price={item.last_price} changePct={item.price_change_pct} currency={item.stock.currency} />
                     </span>

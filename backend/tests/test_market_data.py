@@ -48,6 +48,78 @@ async def test_backfill_profile_survives_finnhub_failure(db_session):
     assert stock.name is None
 
 
+async def test_validate_and_create_stock_accepts_etf_when_stock_profile_empty(db_session):
+    """SPY não é reconhecido por /stock/profile2 (endpoint de empresa), mas
+    /etf/profile devolve dados - deve aceitar-se como ETF em vez de rejeitar."""
+    async def fake_finnhub_get(path, params):
+        if path == "stock/profile2":
+            return {}
+        if path == "etf/profile":
+            return {"profile": {"name": "SPDR S&P 500 ETF Trust", "currency": "USD"}}
+        raise AssertionError(f"unexpected path {path}")
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
+        stock = await market_data.validate_and_create_stock(db_session, "SPY")
+
+    assert stock is not None
+    assert stock.asset_type == "etf"
+    assert stock.name == "SPDR S&P 500 ETF Trust"
+    assert stock.currency == "USD"
+
+
+async def test_validate_and_create_stock_rejects_when_neither_stock_nor_etf(db_session):
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value={})):
+        stock = await market_data.validate_and_create_stock(db_session, "NAOEXISTE")
+
+    assert stock is None
+
+
+async def test_validate_and_create_stock_defaults_to_stock_type(db_session):
+    """Regressão: quando /stock/profile2 já tem dados, nem tenta o ETF - fica
+    com asset_type='stock' (comportamento anterior a esta coluna existir)."""
+    profile = {"name": "Apple Inc.", "currency": "USD", "exchange": "NASDAQ", "finnhubIndustry": "Technology"}
+    mock = AsyncMock(return_value=profile)
+    with patch("app.services.market_data._finnhub_get", new=mock):
+        stock = await market_data.validate_and_create_stock(db_session, "AAPL")
+
+    assert stock.asset_type == "stock"
+    mock.assert_called_once()  # só stock/profile2 - nunca chegou a tentar etf/profile
+
+
+async def test_backfill_profile_falls_back_to_etf(db_session):
+    stock = Stock(ticker="VWCE")  # simula stock criada sem metadados
+    db_session.add(stock)
+    await db_session.flush()
+
+    async def fake_finnhub_get(path, params):
+        if path == "stock/profile2":
+            return {}
+        if path == "etf/profile":
+            return {"profile": {"name": "Vanguard FTSE All-World", "currency": "EUR"}}
+        raise AssertionError(f"unexpected path {path}")
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
+        await market_data._backfill_profile(db_session, stock)
+
+    assert stock.name == "Vanguard FTSE All-World"
+    assert stock.asset_type == "etf"
+
+
+async def test_refresh_fundamentals_skips_stock_metric_for_etf(db_session):
+    stock = Stock(ticker="SPY", currency="USD", asset_type="etf")
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        await market_data.refresh_fundamentals(db_session, stock)  # não deve lançar/chamar a Finnhub
+
+    from sqlalchemy import select
+
+    from app.models import FundamentalsSnapshot
+    rows = (await db_session.execute(select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id))).scalars().all()
+    assert rows == []
+
+
 async def test_get_price_change_computes_pct(db_session):
     stock = Stock(ticker="NVDA")
     db_session.add(stock)

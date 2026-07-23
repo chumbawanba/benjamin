@@ -292,6 +292,11 @@ export default function Portfolio() {
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.ticker}</span>
+                      {p.stock.asset_type === 'etf' && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
+                          ETF
+                        </span>
+                      )}
                       <span className="text-sm">
                         <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
                       </span>
