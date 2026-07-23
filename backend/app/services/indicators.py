@@ -12,11 +12,35 @@ from app.services.indicators_core import INDICATORS
 
 
 async def get_indicator(db: AsyncSession, stock_id: uuid.UUID, metric: str) -> float | None:
-    """Devolve o valor do indicador para hoje, usando cache em indicator_values."""
+    """Devolve o valor atual do indicador.
+
+    Indicadores "price" (PRICE_CLOSE, RSI_14, SMA_50/200, PRICE_VS_SMA_50/200)
+    NUNCA são cacheados - são recalculados a cada pedido a partir do
+    PriceSnapshot mais recente (leitura de BD + pandas, sem custo de API
+    externa, por isso cachear não poupava nada). Bug real corrigido em
+    2026-07-24: com o cache diário antigo (indicator_values, 1 valor por dia
+    civil), o preço no topo da StockDetail (get_price_change, sempre fresco)
+    ficava dessincronizado do RSI/SMA/PRICE_CLOSE mostrados a seguir - o
+    preço intradiário atualiza a cada 15min (ensure_fresh/_record_latest_quote)
+    mas o indicador ficava preso no valor da primeira vez que foi calculado
+    nesse dia, até à meia-noite UTC. Confirmado ao comparar com o Yahoo
+    Finance: a MSFT mostrava PRICE_CLOSE=397.75 (valor da manhã) com o preço
+    já em 381.58 (-4% no dia), e PRICE_VS_SMA_50/200 saíam também errados por
+    arrasto (calculados com o close desatualizado).
+
+    Indicadores "fundamental" (P/E, ROE, margens, etc.) continuam cacheados
+    em indicator_values por dia civil - só mudam a cada refresh_fundamentals
+    (cooldown de horas), por isso o cache diário não introduz staleness
+    relevante aqui."""
     if metric not in INDICATORS:
         raise ValueError(f"Indicador desconhecido: {metric}")
-    today = datetime.now(timezone.utc).date()
+    spec = INDICATORS[metric]
 
+    if spec["kind"] == "price":
+        closes = await _load_closes(db, stock_id)
+        return spec["fn"](closes)
+
+    today = datetime.now(timezone.utc).date()
     cached = (
         await db.execute(select(IndicatorValue).where(
             IndicatorValue.stock_id == stock_id,
@@ -31,14 +55,9 @@ async def get_indicator(db: AsyncSession, stock_id: uuid.UUID, metric: str) -> f
     if cached is not None and cached.value is not None:
         return float(cached.value)
 
-    spec = INDICATORS[metric]
-    if spec["kind"] == "price":
-        closes = await _load_closes(db, stock_id)
-        value = spec["fn"](closes)
-    else:  # fundamental
-        value = await _load_fundamental(db, stock_id, spec["field"])
-        if value is not None and spec.get("scale"):
-            value = value / spec["scale"]
+    value = await _load_fundamental(db, stock_id, spec["field"])
+    if value is not None and spec.get("scale"):
+        value = value / spec["scale"]
 
     decimal_value = Decimal(str(round(value, 6))) if value is not None else None
     if cached is not None:
