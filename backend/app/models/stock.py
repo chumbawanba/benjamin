@@ -23,4 +23,11 @@ class Stock(Base):
     # mesma forma, ver market_data.py). Default "stock" porque é a esmagadora
     # maioria dos tickers existentes antes desta coluna existir.
     asset_type: Mapped[str] = mapped_column(String(10), nullable=False, default="stock", server_default="stock")
+    # Última vez que ensure_fresh tentou o backfill de histórico (sucesso ou
+    # falha) - separado da data do último PriceSnapshot de propósito: um
+    # ticker que a Finnhub/Twelve Data rejeitam (ex: fora de cobertura do
+    # plano gratuito, ver market_data.BACKFILL_RETRY_COOLDOWN) nunca acumula
+    # snapshots, e sem isto tentava-se de novo em TODA a visita à página,
+    # esgotando a quota partilhada da Twelve Data para as restantes ações.
+    last_backfill_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 FRESHNESS_DAYS = 3
 MIN_HISTORY_ROWS = 200  # cobre SMA_200; abaixo disto tenta backfill via Twelve Data
+BACKFILL_RETRY_COOLDOWN = timedelta(hours=6)  # ver ensure_fresh
 HTTP_TIMEOUT = 10.0
 
 FINNHUB_BASE = "https://finnhub.io/api/v1"
@@ -305,7 +306,16 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     Twelve Data, ver _alt_ticker_symbol) tinha sempre `latest` = hoje, logo
     ficava "fresca" para sempre e nunca mais tentava o backfill outra vez -
     ficava com histórico insuficiente indefinidamente mesmo já com a correção
-    do formato do símbolo em vigor."""
+    do formato do símbolo em vigor.
+
+    Um ticker que os provedores rejeitam de forma permanente (ex: fora de
+    cobertura do plano gratuito - ver VUSA.F) nunca acumula PriceSnapshot
+    rows, logo nunca satisfaz `count >= MIN_HISTORY_ROWS` e o cascade
+    completo de retries (3 tentativas Twelve Data + até 4 chamadas Finnhub)
+    corria em TODA a visita à página, esgotando a quota partilhada da Twelve
+    Data (800 pedidos/dia) para as restantes ações. BACKFILL_RETRY_COOLDOWN
+    limita isto a uma tentativa de cada vez esse intervalo, independentemente
+    do resultado."""
     await _backfill_profile(db, stock)
     latest = (
         await db.execute(
@@ -321,6 +331,19 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     is_recent = latest is not None and (today - latest) <= timedelta(days=FRESHNESS_DAYS)
     if is_recent and count >= MIN_HISTORY_ROWS:
         return
+
+    if stock.last_backfill_attempt_at is not None:
+        # SQLite/aiosqlite (usado nos testes) devolve datetimes sem tzinfo
+        # mesmo em colunas DateTime(timezone=True) - normalizar para UTC
+        # explícito antes de subtrair (mesmo padrão de app/routers/analyst.py::_as_utc).
+        last_attempt = stock.last_backfill_attempt_at
+        if last_attempt.tzinfo is None:
+            last_attempt = last_attempt.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - last_attempt
+        if elapsed < BACKFILL_RETRY_COOLDOWN:
+            return
+
+    stock.last_backfill_attempt_at = datetime.now(timezone.utc)
     await refresh_prices(db, stock)
     await refresh_fundamentals(db, stock)
 

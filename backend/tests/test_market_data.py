@@ -254,6 +254,59 @@ async def test_ensure_fresh_skips_when_recent_and_sufficient_history(db_session)
         await market_data.ensure_fresh(db_session, stock)  # não deve lançar
 
 
+async def test_ensure_fresh_skips_retry_when_recently_attempted_and_still_insufficient(db_session):
+    """Um ticker rejeitado permanentemente pelos fornecedores (ex: VUSA.F, fora
+    de cobertura do plano gratuito) nunca acumula histórico suficiente - sem o
+    cooldown, o cascade completo de retries corria em TODA a visita à página,
+    esgotando a quota partilhada da Twelve Data. Com uma tentativa recente
+    (dentro de BACKFILL_RETRY_COOLDOWN), não deve chamar nenhum fornecedor."""
+    stock = Stock(
+        ticker="VUSA.F", currency="EUR",
+        last_backfill_attempt_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))), \
+         patch("app.services.market_data._twelvedata_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        await market_data.ensure_fresh(db_session, stock)  # não deve lançar
+
+
+async def test_ensure_fresh_retries_after_cooldown_expires(db_session):
+    """Passado o BACKFILL_RETRY_COOLDOWN, o retry volta a ser tentado - o
+    cooldown protege a quota partilhada mas não bloqueia para sempre."""
+    stock = Stock(
+        ticker="VUSA.F", currency="EUR",
+        last_backfill_attempt_at=datetime.now(timezone.utc) - market_data.BACKFILL_RETRY_COOLDOWN - timedelta(minutes=1),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    finnhub_mock = AsyncMock(return_value={"c": 0})
+    twelvedata_mock = AsyncMock(return_value={"values": []})
+    with patch("app.services.market_data._finnhub_get", new=finnhub_mock), \
+         patch("app.services.market_data._twelvedata_get", new=twelvedata_mock):
+        await market_data.ensure_fresh(db_session, stock)
+
+    twelvedata_mock.assert_called()
+
+
+async def test_ensure_fresh_sets_last_backfill_attempt_at_after_retry(db_session):
+    """Depois de uma tentativa (mesmo sem histórico suficiente ainda),
+    last_backfill_attempt_at deve ficar atualizado para ativar o cooldown na
+    próxima chamada."""
+    stock = Stock(ticker="VUSA.F", currency="EUR")
+    db_session.add(stock)
+    await db_session.flush()
+    assert stock.last_backfill_attempt_at is None
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value={"c": 0})), \
+         patch("app.services.market_data._twelvedata_get", new=AsyncMock(return_value={"values": []})):
+        await market_data.ensure_fresh(db_session, stock)
+
+    assert stock.last_backfill_attempt_at is not None
+
+
 def test_alt_ticker_symbol_swaps_dot_to_hyphen():
     assert market_data._alt_ticker_symbol("BRK.B") == "BRK-B"
 
