@@ -595,6 +595,12 @@ async def refresh_fundamentals(db: AsyncSession, stock: Stock) -> None:
         # MSFT) - "roeRfy" (rolling four-year) é o fallback real mais próximo.
         roe=_dec(metric.get("roeTTM") or metric.get("roeRfy")),
         current_ratio=_dec(metric.get("currentRatioAnnual") or metric.get("currentRatioQuarterly")),
+        # Confirmados com payload real (MSFT, 2026-07-23) - mesma convenção
+        # de percentagem direta dos quatro campos acima.
+        gross_margin=_dec(metric.get("grossMarginTTM") or metric.get("grossMarginAnnual")),
+        operating_margin=_dec(metric.get("operatingMarginTTM") or metric.get("operatingMarginAnnual")),
+        eps_growth=_dec(metric.get("epsGrowthTTMYoy") or metric.get("epsGrowth3Y")),
+        dividend_growth_5y=_dec(metric.get("dividendGrowthRate5Y")),
     ))
     await db.flush()
 

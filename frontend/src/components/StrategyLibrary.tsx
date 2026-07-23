@@ -40,6 +40,18 @@ const STRATEGIES: LibraryStrategy[] = [
     note: 'Sem histórico diário de fundamentais, o crescimento reflete sempre o valor trimestral mais recente conhecido, não uma tendência ao longo do tempo.',
   },
   {
+    name: 'CAN SLIM (aproximação, William O’Neil)',
+    forWhom: 'Quem procura empresas com aceleração de lucros e a negociar perto de máximos.',
+    explanation:
+      'A estratégia original combina 7 fatores (Current earnings, Annual earnings, New highs, Supply/demand, Leader, Institutional sponsorship, Market direction). Aqui aproxima-se com crescimento de lucros elevado e momentum de preço positivo.',
+    criteria: [
+      { metric: 'EPS_GROWTH', operator: '>', threshold: '25', direction: 'buy_signal' },
+      { metric: 'REVENUE_GROWTH', operator: '>', threshold: '10', direction: 'buy_signal' },
+      { metric: 'PRICE_VS_SMA_50', operator: '>', threshold: '0', direction: 'buy_signal' },
+    ],
+    note: 'Cobre só C/A (crescimento de lucros/receita) e uma aproximação a N/L via momentum de preço — faltam S (procura institucional via volume), I (sponsorship institucional) e M (direção do mercado geral), que o motor não modela por ação individual.',
+  },
+  {
     name: 'GARP (Growth at a Reasonable Price)',
     forWhom: 'Meio-termo entre Value e Growth — quer crescimento, mas sem pagar qualquer preço por ele.',
     explanation: 'Mistura os dois mundos: exige crescimento real, mas com um P/E ainda razoável.',
@@ -60,6 +72,17 @@ const STRATEGIES: LibraryStrategy[] = [
     note: 'O critério de dívida serve para filtrar dividendos pouco sustentáveis — uma empresa muito endividada tem mais probabilidade de cortar o dividendo no futuro.',
   },
   {
+    name: 'Dividend Growth',
+    forWhom: 'Quem prefere um dividendo a crescer de forma consistente a um yield alto mas estagnado.',
+    explanation:
+      'Ao contrário da Dividend Investing (foca-se no yield atual), esta estratégia valoriza empresas que aumentam o dividendo ano após ano — mesmo que o yield de hoje seja modesto.',
+    criteria: [
+      { metric: 'DIVIDEND_GROWTH_5Y', operator: '>', threshold: '5', direction: 'buy_signal' },
+      { metric: 'DEBT_TO_EQUITY', operator: '<', threshold: '1.5', direction: 'buy_signal' },
+    ],
+    note: 'DIVIDEND_GROWTH_5Y é a taxa média de crescimento anual do dividendo nos últimos 5 anos — diferente de DIVIDEND_YIELD (quanto a ação paga hoje face ao preço).',
+  },
+  {
     name: 'Quality Investing',
     forWhom: 'Quem prefere pagar por negócios excelentes a apostar em "gangas".',
     explanation: 'Só entra em empresas de elevada qualidade: rentabilidade alta, margens sólidas, pouca dívida.',
@@ -68,6 +91,18 @@ const STRATEGIES: LibraryStrategy[] = [
       { metric: 'NET_MARGIN', operator: '>', threshold: '15', direction: 'buy_signal' },
       { metric: 'DEBT_TO_EQUITY', operator: '<', threshold: '1.0', direction: 'buy_signal' },
     ],
+  },
+  {
+    name: 'Piotroski F-Score (aproximação)',
+    forWhom: 'Quem quer um filtro mecânico e simples de qualidade financeira.',
+    explanation:
+      'O F-Score original soma 9 pontos binários sobre a evolução ano-a-ano de 9 métricas de rentabilidade, alavancagem e eficiência (ex: "a margem bruta melhorou face ao ano passado?").',
+    criteria: [
+      { metric: 'ROE', operator: '>', threshold: '0', direction: 'buy_signal' },
+      { metric: 'GROSS_MARGIN', operator: '>', threshold: '30', direction: 'buy_signal' },
+      { metric: 'DEBT_TO_EQUITY', operator: '<', threshold: '1.0', direction: 'buy_signal' },
+    ],
+    note: 'Não é o F-Score real: esse mede a EVOLUÇÃO das métricas ano-a-ano (9 pontos binários), não o nível absoluto — o Benjamin só guarda o fundamental mais recente, sem histórico suficiente para medir essa evolução. Isto é só um filtro de qualidade nos níveis atuais (rentabilidade positiva, margem bruta saudável, dívida controlada).',
   },
   {
     name: 'Momentum Investing',

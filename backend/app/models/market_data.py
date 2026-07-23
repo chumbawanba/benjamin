@@ -43,6 +43,13 @@ class FundamentalsSnapshot(Base):
     net_margin: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     roe: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     current_ratio: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    # Desbloqueiam Dividend Growth/CAN SLIM/Piotroski F-Score (aproximado) na
+    # Biblioteca de estratégias - todos em percentagem direta da Finnhub,
+    # mesmo padrão dos quatro campos acima (ver market_data.refresh_fundamentals).
+    gross_margin: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    operating_margin: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    eps_growth: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    dividend_growth_5y: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
 
 
 class IndicatorValue(Base):

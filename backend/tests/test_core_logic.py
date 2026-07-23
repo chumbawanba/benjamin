@@ -119,6 +119,7 @@ class TestIndicators(unittest.TestCase):
             "PRICE_CLOSE", "RSI_14", "SMA_50", "SMA_200", "PE_RATIO", "DIVIDEND_YIELD",
             "EPS", "DEBT_TO_EQUITY", "MARKET_CAP", "PRICE_VS_SMA_50", "PRICE_VS_SMA_200",
             "ROE", "NET_MARGIN", "REVENUE_GROWTH",
+            "GROSS_MARGIN", "OPERATING_MARGIN", "EPS_GROWTH", "DIVIDEND_GROWTH_5Y",
         }
         self.assertEqual(set(INDICATORS.keys()), expected)
 

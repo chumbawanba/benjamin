@@ -20,15 +20,19 @@ function formatDecimal(value: number | string | null | undefined, digits = 2): s
   return n === null ? '—' : n.toFixed(digits);
 }
 
+// Indicadores fundamentais que já vêm em percentagem direta do backend (ver
+// indicators_core.py) — sem o "%" ficava ambíguo (ex: "15.20" podia ler-se
+// como um rácio absoluto em vez de 15.20%).
+const PERCENT_INDICATOR_KEYS = new Set([
+  'ROE', 'NET_MARGIN', 'REVENUE_GROWTH', 'GROSS_MARGIN', 'OPERATING_MARGIN', 'EPS_GROWTH', 'DIVIDEND_GROWTH_5Y',
+]);
+
 function formatIndicatorValue(key: string, value: number | null): string {
   const n = toNum(value);
   if (n === null) return '—';
   if (key === 'DIVIDEND_YIELD') return `${(n * 100).toFixed(2)}%`;
   if (key === 'MARKET_CAP') return `$${n.toFixed(1)}B`;
-  // ROE/NET_MARGIN/REVENUE_GROWTH já vêm em percentagem direta do backend
-  // (ver indicators_core.py) — sem o "%" ficava ambíguo (ex: "15.20" podia
-  // ler-se como um rácio absoluto).
-  if (key === 'ROE' || key === 'NET_MARGIN' || key === 'REVENUE_GROWTH') return `${n.toFixed(2)}%`;
+  if (PERCENT_INDICATOR_KEYS.has(key)) return `${n.toFixed(2)}%`;
   return n.toFixed(2);
 }
 

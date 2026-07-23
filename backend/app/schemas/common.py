@@ -117,6 +117,10 @@ class FundamentalsOut(BaseModel):
     net_margin: Decimal | None
     roe: Decimal | None
     current_ratio: Decimal | None
+    gross_margin: Decimal | None = None
+    operating_margin: Decimal | None = None
+    eps_growth: Decimal | None = None
+    dividend_growth_5y: Decimal | None = None
 
     model_config = {"from_attributes": True}
 

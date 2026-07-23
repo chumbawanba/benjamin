@@ -168,4 +168,36 @@ INDICATORS: dict[str, dict] = {
         "unit": "percentagem (ex: 10 = receita cresceu 10% face ao ano anterior)",
         "trend": "Mais alto = negócio a crescer mais depressa; mais baixo ou negativo = crescimento a abrandar ou receita a encolher.",
     },
+    "GROSS_MARGIN": {
+        "kind": "fundamental", "field": "gross_margin", "lookback_days": 0,
+        "description": "Margem bruta — que fração de cada euro/dólar de receita sobra depois "
+                       "do custo direto de produzir o produto/serviço, antes de despesas "
+                       "operacionais, juros e impostos.",
+        "unit": "percentagem (ex: 40 = margem bruta de 40%, não 0.40)",
+        "trend": "Mais alto = mais poder de precificação ou custos de produção mais baixos face à concorrência; mais baixo = negócio mais dependente de volume para ser rentável.",
+    },
+    "OPERATING_MARGIN": {
+        "kind": "fundamental", "field": "operating_margin", "lookback_days": 0,
+        "description": "Margem operacional — que fração de cada euro/dólar de receita sobra "
+                       "depois de todos os custos operacionais (produção + despesas do negócio), "
+                       "antes de juros e impostos.",
+        "unit": "percentagem (ex: 20 = margem operacional de 20%, não 0.20)",
+        "trend": "Mais alto = negócio operacionalmente mais eficiente; mais baixo = mais custos operacionais a comer a receita.",
+    },
+    "EPS_GROWTH": {
+        "kind": "fundamental", "field": "eps_growth", "lookback_days": 0,
+        "description": "Crescimento do lucro por ação (EPS), ano a ano (YoY), últimos 12 "
+                       "meses — usado por estratégias tipo CAN SLIM, que valorizam aceleração "
+                       "de lucros mais do que o nível absoluto do EPS.",
+        "unit": "percentagem (ex: 25 = EPS cresceu 25% face ao ano anterior)",
+        "trend": "Mais alto = lucro por ação a crescer mais depressa; mais baixo ou negativo = crescimento de lucros a abrandar ou a encolher.",
+    },
+    "DIVIDEND_GROWTH_5Y": {
+        "kind": "fundamental", "field": "dividend_growth_5y", "lookback_days": 0,
+        "description": "Taxa de crescimento anual do dividendo, média dos últimos 5 anos — "
+                       "usada por estratégias de Dividend Growth, que preferem dividendo a "
+                       "crescer de forma consistente a um yield elevado mas estagnado.",
+        "unit": "percentagem (ex: 8 = dividendo cresceu em média 8%/ano nos últimos 5 anos)",
+        "trend": "Mais alto = empresa a aumentar o dividendo de forma consistente (tipicamente sinal de saúde financeira); mais baixo ou negativo = dividendo estagnado ou a encolher.",
+    },
 }

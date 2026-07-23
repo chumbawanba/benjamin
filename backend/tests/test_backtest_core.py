@@ -123,4 +123,5 @@ def test_fundamentals_to_observed_handles_none_row():
     assert set(observed.keys()) == {
         "PE_RATIO", "DIVIDEND_YIELD", "EPS", "DEBT_TO_EQUITY", "MARKET_CAP",
         "ROE", "NET_MARGIN", "REVENUE_GROWTH",
+        "GROSS_MARGIN", "OPERATING_MARGIN", "EPS_GROWTH", "DIVIDEND_GROWTH_5Y",
     }

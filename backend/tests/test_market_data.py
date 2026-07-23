@@ -571,6 +571,10 @@ async def test_refresh_fundamentals_maps_extended_metrics(db_session):
             "netProfitMarginTTM": 25.3,
             "roeTTM": 147.9,
             "currentRatioAnnual": 1.05,
+            "grossMarginTTM": 44.1,
+            "operatingMarginTTM": 30.2,
+            "epsGrowthTTMYoy": 22.7,
+            "dividendGrowthRate5Y": 9.4,
         }
     }
     with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=metric_payload)):
@@ -586,6 +590,33 @@ async def test_refresh_fundamentals_maps_extended_metrics(db_session):
     assert row.net_margin == Decimal("25.3")
     assert row.roe == Decimal("147.9")
     assert row.current_ratio == Decimal("1.05")
+    assert row.gross_margin == Decimal("44.1")
+    assert row.operating_margin == Decimal("30.2")
+    assert row.eps_growth == Decimal("22.7")
+    assert row.dividend_growth_5y == Decimal("9.4")
+
+
+async def test_refresh_fundamentals_falls_back_to_annual_margins_and_3y_eps_growth(db_session):
+    """Quando os campos TTM não vêm no payload (ex: empresa sem trimestre
+    reportado recente), cai para as variantes Annual/3Y - mesmo padrão já
+    usado para pe/eps/revenue_growth/net_margin/roe."""
+    stock = Stock(ticker="AAPL", currency="USD")
+    db_session.add(stock)
+    await db_session.flush()
+
+    metric_payload = {"metric": {"grossMarginAnnual": 41.0, "operatingMarginAnnual": 28.0, "epsGrowth3Y": 12.4}}
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=metric_payload)):
+        await market_data.refresh_fundamentals(db_session, stock)
+
+    from app.models import FundamentalsSnapshot
+    from sqlalchemy import select
+    row = (
+        await db_session.execute(select(FundamentalsSnapshot).where(FundamentalsSnapshot.stock_id == stock.id))
+    ).scalar_one()
+    assert row.gross_margin == Decimal("41.0")
+    assert row.operating_margin == Decimal("28.0")
+    assert row.eps_growth == Decimal("12.4")
+    assert row.dividend_growth_5y is None
 
 
 async def test_get_market_pulse_happy_path():

@@ -95,12 +95,14 @@ def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:
     """Linha compacta com os fundamentais disponíveis (só os que existem) -
     mesmos campos já usados nas estratégias (PE_RATIO, DIVIDEND_YIELD, EPS,
     DEBT_TO_EQUITY, MARKET_CAP) mais métricas de "posição financeira"
-    (crescimento de receita, margem líquida, ROE, rácio corrente) - permitem
-    ao Benjamin responder a perguntas sobre lucros/saúde financeira de uma
-    ação, não só os critérios de estratégia. Formatação como no registry de
-    indicadores (indicators_core.py): dividend_yield é fração (0.02 = 2%),
-    market_cap em USD (mostrado em B$); os quatro novos já vêm em percentagem/
-    rácio direto (ver market_data.refresh_fundamentals)."""
+    (crescimento de receita, margem líquida, ROE, rácio corrente, margem
+    bruta, margem operacional, crescimento de EPS, crescimento de dividendo a
+    5 anos) - permitem ao Benjamin responder a perguntas sobre lucros/saúde
+    financeira de uma ação, não só os critérios de estratégia. Formatação
+    como no registry de indicadores (indicators_core.py): dividend_yield é
+    fração (0.02 = 2%), market_cap em USD (mostrado em B$); todos os
+    restantes já vêm em percentagem/rácio direto (ver
+    market_data.refresh_fundamentals)."""
     if row is None:
         return "sem fundamentais"
     parts = []
@@ -122,6 +124,14 @@ def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:
         parts.append(f"ROE {row.roe}%")
     if row.current_ratio is not None:
         parts.append(f"rácio corrente {row.current_ratio}")
+    if row.gross_margin is not None:
+        parts.append(f"margem bruta {row.gross_margin}%")
+    if row.operating_margin is not None:
+        parts.append(f"margem operacional {row.operating_margin}%")
+    if row.eps_growth is not None:
+        parts.append(f"crescimento EPS {row.eps_growth}%")
+    if row.dividend_growth_5y is not None:
+        parts.append(f"crescimento dividendo 5A {row.dividend_growth_5y}%")
     return ", ".join(parts) if parts else "sem fundamentais"
 
 

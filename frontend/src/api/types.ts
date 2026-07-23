@@ -134,6 +134,10 @@ export interface Fundamentals {
   net_margin: number | string | null;
   roe: number | string | null;
   current_ratio: number | string | null;
+  gross_margin: number | string | null;
+  operating_margin: number | string | null;
+  eps_growth: number | string | null;
+  dividend_growth_5y: number | string | null;
 }
 
 export interface EvaluationCriterion {
