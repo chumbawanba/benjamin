@@ -189,6 +189,16 @@ class SuggestionOut(BaseModel):
     based_on: str  # ticker da watchlist que originou a sugestão (mesma indústria)
 
 
+class WatchlistPulseOut(BaseModel):
+    """Vista compacta de estado por ação (preço + score de síntese), usada no
+    separador "Sinais" da Overview como fallback quando nenhuma estratégia
+    ativa tem sinais de compra/venda - ver GET /watchlist/pulse."""
+    stock: StockOut
+    last_price: Decimal | None
+    price_change_pct: Decimal | None
+    synthesis_score: float | None
+
+
 class NewsItemOut(BaseModel):
     ticker: str
     headline: str | None

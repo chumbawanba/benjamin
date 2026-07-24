@@ -1,11 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { Horizon, NewsItem, StrategySignal, StrategySignalGroup, WatchlistItem } from '../api/types';
+import { Horizon, NewsItem, StrategySignal, StrategySignalGroup, WatchlistItem, WatchlistPulse } from '../api/types';
 import AnalystSummaryCard from '../components/AnalystSummaryCard';
 import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
 import PriceChange from '../components/PriceChange';
 import RecommendationBadge from '../components/RecommendationBadge';
+
+// Classificação simplificada do synthesis_score (0-100) em 3 baldes, para o
+// "Pulso da watchlist" — mesma paleta favorável/neutro/desfavorável do
+// StockSynthesisCard, mas sem "misto" (esse só faz sentido por categoria,
+// aqui é um único número agregado).
+type ScoreBucket = 'favoravel' | 'neutro' | 'desfavoravel';
+
+function scoreBucket(score: number | null): ScoreBucket | null {
+  if (score === null) return null;
+  if (score >= 60) return 'favoravel';
+  if (score <= 40) return 'desfavoravel';
+  return 'neutro';
+}
+
+const SCORE_BUCKET_LABELS: Record<ScoreBucket, string> = {
+  favoravel: 'Favorável',
+  desfavoravel: 'Desfavorável',
+  neutro: 'Neutro',
+};
+
+const SCORE_BUCKET_STYLES: Record<ScoreBucket, string> = {
+  favoravel: 'bg-green-100 text-green-700 dark:bg-emerald-500/15 dark:text-emerald-400',
+  desfavoravel: 'bg-red-100 text-red-700 dark:bg-rose-500/15 dark:text-rose-400',
+  neutro: 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-400',
+};
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -30,6 +55,7 @@ type Tab = 'sinais' | 'noticias';
 export default function Overview() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [groups, setGroups] = useState<StrategySignalGroup[]>([]);
+  const [pulse, setPulse] = useState<WatchlistPulse[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [tab, setTab] = useState<Tab>('sinais');
   const [loading, setLoading] = useState(true);
@@ -39,14 +65,16 @@ export default function Overview() {
   async function load() {
     setLoading(true);
     try {
-      const [wl, newsItems, signalGroups] = await Promise.all([
+      const [wl, newsItems, signalGroups, pulseItems] = await Promise.all([
         api.get<WatchlistItem[]>('/watchlist'),
         api.get<NewsItem[]>('/watchlist/news'),
         api.get<StrategySignalGroup[]>('/evaluations/latest-by-strategy'),
+        api.get<WatchlistPulse[]>('/watchlist/pulse'),
       ]);
       setWatchlist(wl);
       setNews(newsItems);
       setGroups(signalGroups);
+      setPulse(pulseItems);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar');
     } finally {
@@ -63,6 +91,12 @@ export default function Overview() {
     watchlist.forEach((w) => map.set(w.stock.id, w));
     return map;
   }, [watchlist]);
+
+  // Se nenhuma estratégia ativa tem sinais de compra/venda (comum com
+  // estratégias conservadoras), o separador "Sinais" ficaria só com frases
+  // "sem sinais" repetidas por estratégia - mostra-se em vez disso o pulso
+  // da watchlist (score de síntese por ação), para haver sempre conteúdo útil.
+  const hasAnySignal = useMemo(() => groups.some((g) => g.signals.length > 0), [groups]);
 
   async function persistOrder(items: WatchlistItem[]) {
     setReorderError(null);
@@ -153,6 +187,47 @@ export default function Overview() {
                   </Link>
                   .
                 </p>
+              ) : !hasAnySignal ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Nenhuma estratégia tem sinais de compra ou venda no momento. Estado atual de cada ação da
+                    watchlist:
+                  </p>
+                  <ul className="space-y-2">
+                    {pulse.map((p) => {
+                      const wlItem = watchlistByStockId.get(p.stock.id);
+                      const bucket = scoreBucket(p.synthesis_score);
+                      return (
+                        <li
+                          key={p.stock.id}
+                          className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <Link
+                              to={wlItem ? `/stocks/${wlItem.id}` : '#'}
+                              className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400"
+                            >
+                              {p.stock.ticker}
+                            </Link>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
+                              <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
+                            </p>
+                          </div>
+                          <span
+                            title="Leitura simplificada a partir de PE, RSI, crescimento e rendibilidade - não é a recomendação da estratégia nem aconselhamento financeiro."
+                            className={`shrink-0 text-xs font-medium px-2 py-1 rounded-full cursor-help ${
+                              bucket
+                                ? SCORE_BUCKET_STYLES[bucket]
+                                : 'bg-gray-100 text-gray-400 dark:bg-slate-800 dark:text-slate-500'
+                            }`}
+                          >
+                            {bucket ? SCORE_BUCKET_LABELS[bucket] : 'Sem dados'}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               ) : (
                 <div className="space-y-5">
                   {groups.map((group) => (

@@ -237,6 +237,61 @@ async def test_suggestions_isolated_between_users(client, user_a, user_b):
     assert resp.json() == []  # user_b não tem watchlist, sem peers a agregar
 
 
+async def test_pulse_empty_watchlist(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get("/watchlist/pulse", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_pulse_requires_auth(client):
+    resp = await client.get("/watchlist/pulse")
+    assert resp.status_code == 401
+
+
+async def test_pulse_returns_score_and_price(client, db_session, user_a, seeded_stock):
+    """Mesmo raciocínio de síntese do test_watchlist_item_detail: seeded_stock
+    só tem pe_ratio (12.0, favorável) - score fica calculado a partir disso,
+    sem precisar de nenhuma estratégia ativa nem sinal BUY/SELL disparado."""
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+
+    resp = await client.get("/watchlist/pulse", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["stock"]["ticker"] == "AAPL"
+    assert body[0]["last_price"] is not None
+    assert body[0]["synthesis_score"] is not None
+
+
+async def test_pulse_follows_display_order(client, db_session, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        r1 = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+        r2 = await client.post("/watchlist", json={"ticker": "MSFT"}, headers=headers)
+    await client.put(
+        "/watchlist/reorder",
+        json={"ordered_ids": [r2.json()["id"], r1.json()["id"]]},
+        headers=headers,
+    )
+    resp = await client.get("/watchlist/pulse", headers=headers)
+    tickers = [row["stock"]["ticker"] for row in resp.json()]
+    assert tickers == ["MSFT", "AAPL"]
+
+
+async def test_pulse_isolated_between_users(client, user_a, user_b):
+    headers_a = await login(client, "a@test.dev", "password-a")
+    headers_b = await login(client, "b@test.dev", "password-b")
+    with mock_market_data_valid():
+        await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers_a)
+
+    resp = await client.get("/watchlist/pulse", headers=headers_b)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
 async def test_reorder(client, user_a):
     headers = await login(client, "a@test.dev", "password-a")
     with mock_market_data_valid():

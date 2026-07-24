@@ -30,6 +30,7 @@ from app.schemas.common import (
     TickerSearchResult,
     WatchlistItemIn,
     WatchlistItemOut,
+    WatchlistPulseOut,
     WatchlistReorderIn,
 )
 from app.security import get_current_user
@@ -150,6 +151,40 @@ async def watchlist_suggestions(
             if len(suggestions) >= limit:
                 return suggestions
     return suggestions
+
+
+@router.get("/pulse", response_model=list[WatchlistPulseOut])
+async def watchlist_pulse(
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Vista compacta de estado por ação (preço + score de síntese 0-100, ver
+    synthesis.compute_synthesis), na ordem manual da watchlist. Usada no
+    separador "Sinais" da Overview como conteúdo de substituição quando
+    nenhuma estratégia ativa tem sinais de compra/venda no momento - comum
+    com estratégias conservadoras (threshold alto -> maioria HOLD), o que
+    deixava a aba principal da app vazia na maior parte dos dias. Só lê dados
+    já cacheados (indicadores/preço) - não chama ensure_fresh, para não
+    disparar N pedidos externos numa única visita à Overview."""
+    items = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.user_id == user.id)
+            .order_by(WatchlistItem.display_order.asc(), WatchlistItem.added_at.desc())
+        )
+    ).scalars().all()
+    out: list[WatchlistPulseOut] = []
+    for item in items:
+        stock = item.stock
+        last_price, price_change_pct = await market_data.get_price_change(db, stock.id)
+        indicator_values = {key: await indicators.get_indicator(db, stock.id, key) for key in INDICATORS}
+        synthesis_result = synthesis.compute_synthesis(indicator_values)
+        out.append(WatchlistPulseOut(
+            stock=StockOut.model_validate(stock),
+            last_price=last_price, price_change_pct=price_change_pct,
+            synthesis_score=synthesis_result.score,
+        ))
+    await db.commit()  # get_indicator pode ter gravado cache novo (indicadores "fundamental")
+    return out
 
 
 @router.get("", response_model=list[WatchlistItemOut])

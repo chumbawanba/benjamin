@@ -180,6 +180,15 @@ export interface PeerComparison {
   net_margin: number | string | null;
 }
 
+// Vista compacta usada no separador "Sinais" da Overview quando nenhuma
+// estratégia ativa tem sinais de compra/venda - ver GET /watchlist/pulse.
+export interface WatchlistPulse {
+  stock: Stock;
+  last_price: number | string | null;
+  price_change_pct: number | string | null;
+  synthesis_score: number | null;
+}
+
 export interface StockDetail {
   stock: Stock;
   last_price: number | null;
