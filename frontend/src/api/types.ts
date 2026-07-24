@@ -211,6 +211,8 @@ export interface StrategySignal {
   run_at: string;
   last_price: number | null;
   price_change_pct: number | null;
+  synthesis_label: string | null;
+  synthesis_reason: string | null;
 }
 
 export interface AnalystSummary {

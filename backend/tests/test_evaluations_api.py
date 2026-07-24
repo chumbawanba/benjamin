@@ -179,6 +179,53 @@ async def test_latest_by_strategy_groups_and_excludes_hold(client, db_session, u
     assert hold_group["horizon"] == "long_term"
 
 
+async def test_latest_by_strategy_includes_synthesis_label_for_matching_signal(
+    client, db_session, user_a, seeded_stock
+):
+    """BUY disparado só por P/E barato (12.0 < 15) - a síntese genérica
+    (thresholds fixos, ver synthesis.py) também classifica valuation como
+    favorável para o mesmo stock, por isso o sinal fica com um "porquê"
+    (categoria + razão) sem precisar de abrir o detalhe da ação."""
+    template = StrategyTemplate(user_id=user_a.id, name="Só valuation")
+    db_session.add(template)
+    await db_session.flush()
+    db_session.add(StrategyItem(
+        template_id=template.id, name="P/E barato", metric="PE_RATIO",
+        operator="<", threshold_value=Decimal("15"), weight=Decimal("1"),
+        direction="buy_signal",
+    ))
+    db_session.add(WatchlistItem(user_id=user_a.id, stock_id=seeded_stock.id))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post("/evaluations/run", json={"template_id": str(template.id)}, headers=headers)
+
+    resp = await client.get("/evaluations/latest-by-strategy", headers=headers)
+    assert resp.status_code == 200
+    signal = resp.json()[0]["signals"][0]
+    assert signal["recommendation"] == "BUY"
+    assert signal["synthesis_label"] == "Valuation"
+    assert "PE" in signal["synthesis_reason"]
+
+
+async def test_latest_by_strategy_synthesis_label_none_when_no_matching_category(
+    client, db_session, user_a, seeded_stock
+):
+    """SELL disparado por RSI sobrecomprado, mas a síntese genérica classifica
+    momentum como "misto" (preço também está bem acima da SMA_50) - sem
+    nenhuma categoria puramente desfavorável, o campo fica None em vez de
+    mostrar um "porquê" que não bate certo com o sinal real."""
+    template = await _setup(db_session, user_a, seeded_stock)  # Value simples -> SELL
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post("/evaluations/run", json={"template_id": str(template.id)}, headers=headers)
+
+    resp = await client.get("/evaluations/latest-by-strategy", headers=headers)
+    signal = resp.json()[0]["signals"][0]
+    assert signal["recommendation"] == "SELL"
+    assert signal["synthesis_label"] is None
+    assert signal["synthesis_reason"] is None
+
+
 async def test_backtest_chart_returns_points_and_trades(client, db_session, user_a):
     template, stock, n = await _setup_cyclical_stock(db_session, user_a)
     headers = await login(client, "a@test.dev", "password-a")

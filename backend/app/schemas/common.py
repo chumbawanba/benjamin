@@ -396,6 +396,13 @@ class StrategySignalOut(BaseModel):
     run_at: datetime
     last_price: Decimal | None
     price_change_pct: Decimal | None
+    # Categoria da síntese (ver synthesis.py) cuja classificação bate com a
+    # recomendação (favorável -> BUY, desfavorável -> SELL) - None se a
+    # síntese (heurística de thresholds fixos) não tiver nenhuma categoria
+    # coerente com o sinal real (que vem dos critérios da estratégia do
+    # utilizador, podem divergir). Dá um "porquê" rápido sem abrir o detalhe.
+    synthesis_label: str | None = None
+    synthesis_reason: str | None = None
 
 
 class StrategySignalGroupOut(BaseModel):

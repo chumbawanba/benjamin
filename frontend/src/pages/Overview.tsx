@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { Horizon, NewsItem, StrategySignal, StrategySignalGroup, WatchlistItem, WatchlistPulse } from '../api/types';
+import {
+  Horizon, MetricInfo, NewsItem, StrategySignal, StrategySignalGroup, WatchlistItem, WatchlistPulse,
+} from '../api/types';
 import AnalystSummaryCard from '../components/AnalystSummaryCard';
 import PortfolioSummaryCard from '../components/PortfolioSummaryCard';
 import PriceChange from '../components/PriceChange';
@@ -50,12 +52,21 @@ function horizonLabel(h: Horizon | null): string | null {
   return null;
 }
 
+// Dia do ano (1-366) - usado para fazer rodar a micro-nota educativa uma vez
+// por dia sem precisar de guardar estado nenhum (mesmo dia -> mesma nota).
+function dayOfYear(): number {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 type Tab = 'sinais' | 'noticias';
 
 export default function Overview() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [groups, setGroups] = useState<StrategySignalGroup[]>([]);
   const [pulse, setPulse] = useState<WatchlistPulse[]>([]);
+  const [metrics, setMetrics] = useState<MetricInfo[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [tab, setTab] = useState<Tab>('sinais');
   const [loading, setLoading] = useState(true);
@@ -65,16 +76,18 @@ export default function Overview() {
   async function load() {
     setLoading(true);
     try {
-      const [wl, newsItems, signalGroups, pulseItems] = await Promise.all([
+      const [wl, newsItems, signalGroups, pulseItems, metricsList] = await Promise.all([
         api.get<WatchlistItem[]>('/watchlist'),
         api.get<NewsItem[]>('/watchlist/news'),
         api.get<StrategySignalGroup[]>('/evaluations/latest-by-strategy'),
         api.get<WatchlistPulse[]>('/watchlist/pulse'),
+        api.get<MetricInfo[]>('/strategies/metrics'),
       ]);
       setWatchlist(wl);
       setNews(newsItems);
       setGroups(signalGroups);
       setPulse(pulseItems);
+      setMetrics(metricsList);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar');
     } finally {
@@ -97,6 +110,16 @@ export default function Overview() {
   // "sem sinais" repetidas por estratégia - mostra-se em vez disso o pulso
   // da watchlist (score de síntese por ação), para haver sempre conteúdo útil.
   const hasAnySignal = useMemo(() => groups.some((g) => g.signals.length > 0), [groups]);
+
+  // Micro-nota educativa: 1 descrição de indicador por dia (mesmo dia -> mesma
+  // nota para todos, sem precisar de estado persistido) - reaproveita as
+  // descrições já escritas para os indicadores (ver indicators_core.py),
+  // servidas por GET /strategies/metrics (estático, sem custo por ação).
+  const dailyTip = useMemo(() => {
+    const withDescription = metrics.filter((m) => m.description);
+    if (withDescription.length === 0) return null;
+    return withDescription[dayOfYear() % withDescription.length];
+  }, [metrics]);
 
   async function persistOrder(items: WatchlistItem[]) {
     setReorderError(null);
@@ -171,6 +194,11 @@ export default function Overview() {
           {tab === 'sinais' && (
             <>
               {reorderError && <p className="text-sm text-red-600 dark:text-rose-400 mb-2">{reorderError}</p>}
+              {dailyTip && watchlist.length > 0 && (
+                <p className="text-xs text-gray-400 dark:text-slate-500 mb-3">
+                  Sabias que? {dailyTip.description}
+                </p>
+              )}
               {watchlist.length === 0 ? (
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   A watchlist está vazia.{' '}
@@ -293,6 +321,15 @@ export default function Overview() {
                                       />
                                       <span>· avaliado {formatDate(signal.run_at)}</span>
                                     </p>
+                                    {signal.synthesis_label && (
+                                      <p
+                                        className="text-xs text-gray-400 dark:text-slate-500 truncate"
+                                        title="Leitura simplificada a partir de thresholds fixos - não é a recomendação da estratégia nem aconselhamento financeiro."
+                                      >
+                                        {signal.synthesis_label}
+                                        {signal.synthesis_reason ? `: ${signal.synthesis_reason}` : ''}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="shrink-0">

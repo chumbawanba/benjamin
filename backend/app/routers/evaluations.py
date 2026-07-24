@@ -12,7 +12,8 @@ from app.schemas.common import (
     StrategySignalGroupOut, StrategySignalOut,
 )
 from app.security import get_current_user
-from app.services import agent, backtest_core, market_data
+from app.services import agent, backtest_core, indicators, market_data, synthesis
+from app.services.indicators_core import INDICATORS
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
@@ -130,17 +131,35 @@ async def latest_by_strategy(
             if evaluation is None or evaluation.recommendation == "HOLD":
                 continue
             last_price, price_change_pct = await market_data.get_price_change(db, item.stock_id)
+
+            # "Porquê" rápido: reaproveita a síntese por thresholds fixos
+            # (synthesis.py) para encontrar a categoria coerente com o sinal -
+            # só calculado para ações com sinal real, não para toda a
+            # watchlist (isso é o /watchlist/pulse). Se a heurística genérica
+            # não tiver nenhuma categoria coerente com este sinal específico
+            # (que vem dos critérios da estratégia do utilizador, pode
+            # divergir), fica None e o frontend simplesmente não mostra a linha.
+            indicator_values = {key: await indicators.get_indicator(db, item.stock_id, key) for key in INDICATORS}
+            synthesis_result = synthesis.compute_synthesis(indicator_values)
+            target_class = "favoravel" if evaluation.recommendation == "BUY" else "desfavoravel"
+            matching_cat = next(
+                (c for c in synthesis_result.categories if c.classification == target_class), None
+            )
+
             signals.append(StrategySignalOut(
                 stock=StockOut.model_validate(item.stock),
                 recommendation=evaluation.recommendation,
                 buy_score=evaluation.buy_score, sell_score=evaluation.sell_score,
                 run_at=evaluation.run_at,
                 last_price=last_price, price_change_pct=price_change_pct,
+                synthesis_label=matching_cat.label if matching_cat else None,
+                synthesis_reason=matching_cat.reason if matching_cat else None,
             ))
         groups.append(StrategySignalGroupOut(
             strategy_id=template.id, strategy_name=template.name,
             horizon=template.horizon, signals=signals,
         ))
+    await db.commit()  # get_indicator pode ter gravado cache novo (indicadores "fundamental")
     return groups
 
 
