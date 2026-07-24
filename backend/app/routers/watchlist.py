@@ -21,6 +21,7 @@ from app.schemas.common import (
     FundamentalsOut,
     IndicatorValueOut,
     NewsItemOut,
+    PeerComparisonOut,
     PricePointOut,
     StockDetailOut,
     StockOut,
@@ -215,6 +216,35 @@ async def watchlist_item_detail(
     ).scalar_one_or_none()
     fundamentals = FundamentalsOut.model_validate(fundamentals_row) if fundamentals_row else None
 
+    # Comparação com peers: só considera tickers que já existem na BD (outro
+    # utilizador já os adicionou nalgum momento) e já têm fundamentais - sem
+    # isto teríamos de criar/enriquecer stocks novas (chamadas Finnhub extra)
+    # só para preencher esta secção. get_peers_cached tem o seu próprio
+    # cooldown (dias), por isso não gasta quota a cada visita à página.
+    peer_tickers = await market_data.get_peers_cached(db, stock)
+    peers_out: list[PeerComparisonOut] = []
+    if peer_tickers:
+        peer_stocks_by_ticker = {
+            s.ticker: s
+            for s in (
+                await db.execute(select(Stock).where(Stock.ticker.in_(peer_tickers)))
+            ).scalars().all()
+        }
+        for ticker in peer_tickers:
+            peer_stock = peer_stocks_by_ticker.get(ticker)
+            if peer_stock is None:
+                continue
+            peer_fundamentals = await market_data.get_latest_fundamentals(db, peer_stock.id)
+            if peer_fundamentals is None:
+                continue
+            peers_out.append(PeerComparisonOut(
+                ticker=peer_stock.ticker, name=peer_stock.name,
+                pe_ratio=peer_fundamentals.pe_ratio, roe=peer_fundamentals.roe,
+                net_margin=peer_fundamentals.net_margin,
+            ))
+            if len(peers_out) >= 4:
+                break
+
     latest_eval = (
         await db.execute(
             select(Evaluation).options(selectinload(Evaluation.details))
@@ -270,6 +300,7 @@ async def watchlist_item_detail(
                 for c in synthesis_result.categories
             ],
         ),
+        peers=peers_out,
     )
 
 
@@ -307,7 +338,7 @@ async def add_to_watchlist(
     user: User = Depends(rate_limit_user("watchlist_add", max_calls=20, window_seconds=600)),
     db: AsyncSession = Depends(get_db),
 ):
-    stock = await market_data.validate_and_create_stock(db, body.ticker)
+    stock = await market_data.validate_and_create_stock(db, body.ticker, asset_type_hint=body.asset_type_hint)
     if stock is None:
         raise HTTPException(status_code=422, detail=f"Ticker '{body.ticker}' não encontrado")
     dup = (

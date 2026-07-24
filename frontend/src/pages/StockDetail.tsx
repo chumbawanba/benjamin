@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
 import { StockDetail as StockDetailType } from '../api/types';
+import PeerComparisonCard from '../components/PeerComparisonCard';
 import PriceChange from '../components/PriceChange';
 import RecommendationBadge from '../components/RecommendationBadge';
 import Sparkline from '../components/Sparkline';
@@ -189,6 +190,13 @@ export default function StockDetail() {
       </div>
 
       <StockSynthesisCard synthesis={detail.synthesis} />
+
+      <PeerComparisonCard
+        ticker={detail.stock.ticker}
+        name={detail.stock.name}
+        fundamentals={detail.fundamentals}
+        peers={detail.peers}
+      />
 
       <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Indicadores</h2>
       <div className="grid grid-cols-2 gap-2 mb-6">

@@ -64,11 +64,11 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedKey]);
 
-  async function handleAddTicker(ticker: string) {
+  async function handleAddTicker(ticker: string, assetTypeHint?: string | null) {
     setAddingTicker(ticker);
     setError(null);
     try {
-      await api.post('/watchlist', { ticker });
+      await api.post('/watchlist', { ticker, asset_type_hint: assetTypeHint ?? undefined });
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : `Erro ao adicionar ${ticker}`);
@@ -215,7 +215,7 @@ export default function Watchlist({ embedded = false }: { embedded?: boolean }) 
                       <p className="text-gray-500 dark:text-slate-400 truncate">{r.name}</p>
                     </div>
                     <button
-                      onClick={() => handleAddTicker(r.ticker)}
+                      onClick={() => handleAddTicker(r.ticker, r.type)}
                       disabled={already || addingTicker === r.ticker}
                       className="text-navy-600 dark:text-navy-400 font-medium shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
                     >

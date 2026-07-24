@@ -362,6 +362,65 @@ async def test_watchlist_item_detail(client, db_session, user_a, seeded_stock):
     assert by_category["growth"]["classification"] is None
     assert by_category["profitability"]["classification"] is None
 
+    assert body["peers"] == []  # get_peers_cached não mockado aqui - falha em silêncio, sem peers
+
+
+async def test_watchlist_item_detail_includes_peer_comparison(client, db_session, user_a, seeded_stock):
+    """Um peer que já existe na BD (outro utilizador já o adicionou nalgum
+    momento) e já tem fundamentais deve aparecer na comparação - sem criar
+    nenhuma stock nova nem chamar a Finnhub para o peer em si."""
+    from datetime import date
+    from unittest.mock import AsyncMock, patch
+
+    from app.models import FundamentalsSnapshot, Stock
+
+    peer = Stock(ticker="MSFT", name="Microsoft Corp")
+    db_session.add(peer)
+    await db_session.flush()
+    db_session.add(FundamentalsSnapshot(
+        stock_id=peer.id, date=date.today(), pe_ratio=Decimal("25.0"),
+        roe=Decimal("30.0"), net_margin=Decimal("35.0"),
+    ))
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        resp = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+    item_id = resp.json()["id"]
+
+    with patch("app.services.market_data.get_peers_cached", new=AsyncMock(return_value=["MSFT"])):
+        resp = await client.get(f"/watchlist/{item_id}/detail", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert len(body["peers"]) == 1
+    assert body["peers"][0]["ticker"] == "MSFT"
+    assert body["peers"][0]["name"] == "Microsoft Corp"
+    assert float(body["peers"][0]["pe_ratio"]) == 25.0
+    assert float(body["peers"][0]["roe"]) == 30.0
+
+
+async def test_watchlist_item_detail_ignores_peer_without_fundamentals(client, db_session, user_a, seeded_stock):
+    """Um peer sugerido pela Finnhub mas que ainda não tem fundamentais
+    guardados (ou nem sequer existe como Stock na nossa BD) fica de fora da
+    comparação, em vez de aparecer com valores None."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models import Stock
+
+    db_session.add(Stock(ticker="TSLA", name="Tesla Inc"))  # sem fundamentais
+    await db_session.commit()
+
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        resp = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+    item_id = resp.json()["id"]
+
+    with patch("app.services.market_data.get_peers_cached", new=AsyncMock(return_value=["TSLA", "NAOEXISTE"])):
+        resp = await client.get(f"/watchlist/{item_id}/detail", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["peers"] == []
+
 
 async def test_watchlist_item_detail_not_found_for_other_user(client, db_session, user_a, user_b, seeded_stock):
     headers_a = await login(client, "a@test.dev", "password-a")

@@ -43,6 +43,11 @@ class WatchlistItemIn(BaseModel):
     notes: str | None = None
     target_buy_price: Decimal | None = None
     target_sell_price: Decimal | None = None
+    # Campo `type` devolvido pela Finnhub /search (ver TickerSearchResult),
+    # quando o ticker foi escolhido a partir dos resultados de pesquisa -
+    # ajuda validate_and_create_stock a reconhecer ETFs sem depender só do
+    # stock/profile2 e etf/profile (ver market_data.py).
+    asset_type_hint: str | None = None
 
 
 class StockOut(BaseModel):
@@ -137,6 +142,14 @@ class StockSynthesisOut(BaseModel):
     categories: list[CategorySynthesisOut]
 
 
+class PeerComparisonOut(BaseModel):
+    ticker: str
+    name: str | None
+    pe_ratio: Decimal | None
+    roe: Decimal | None
+    net_margin: Decimal | None
+
+
 class EvaluationCriterionOut(BaseModel):
     name: str
     metric: str
@@ -161,6 +174,7 @@ class StockDetailOut(BaseModel):
     strategy_name: str | None
     criteria: list[EvaluationCriterionOut]
     synthesis: StockSynthesisOut
+    peers: list[PeerComparisonOut]
 
 
 class TickerSearchResult(BaseModel):

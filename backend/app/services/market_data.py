@@ -114,6 +114,26 @@ async def get_peers(ticker: str) -> list[str]:
     return [p.upper() for p in data if isinstance(p, str) and p.upper() != ticker.upper()]
 
 
+PEERS_REFRESH_COOLDOWN = timedelta(days=7)  # peers mudam raramente - cooldown bem maior que os outros campos deste ficheiro
+
+
+async def get_peers_cached(db: AsyncSession, stock: Stock) -> list[str]:
+    """Peers com cache em Stock.peers_cache/peers_fetched_at
+    (PEERS_REFRESH_COOLDOWN) - evita gastar uma chamada Finnhub extra em
+    toda visita à StockDetail, já que a composição de peers de uma empresa
+    não muda de um dia para o outro (mesmo padrão dos outros campos
+    last_*_attempt_at deste ficheiro, só que com um cooldown em dias)."""
+    last_fetch = _as_utc(stock.peers_fetched_at)
+    if last_fetch is not None and datetime.now(timezone.utc) - last_fetch < PEERS_REFRESH_COOLDOWN:
+        return stock.peers_cache.split(",") if stock.peers_cache else []
+
+    peers = (await get_peers(stock.ticker))[:10]  # cap - Stock.peers_cache é String(200)
+    stock.peers_fetched_at = datetime.now(timezone.utc)
+    stock.peers_cache = ",".join(peers) if peers else None
+    await db.flush()
+    return peers
+
+
 MARKET_INDEX_PROXIES = [
     ("SPY", "S&P 500 (EUA, mercado amplo)"),
     ("QQQ", "Nasdaq 100 (tecnologia EUA)"),
@@ -223,15 +243,39 @@ async def search_tickers(query: str, limit: int = 8) -> list[dict]:
     return out[:limit]
 
 
-async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | None:
+def _looks_like_etf_hint(asset_type_hint: str | None) -> bool:
+    """Normaliza o campo `type` da Finnhub /search para saber se a pesquisa
+    já identificou o instrumento como fundo. "ETP" (Exchange Traded Product)
+    é o valor que a Finnhub devolve tipicamente para ETFs UCITS europeus
+    (ver test_search_tickers_prioritizes_listings_without_exchange_suffix,
+    ex: VWCE.DE) - "ETF" também aparece para fundos americanos."""
+    if not asset_type_hint:
+        return False
+    normalized = asset_type_hint.lower()
+    return "etf" in normalized or "etp" in normalized
+
+
+async def validate_and_create_stock(
+    db: AsyncSession, ticker: str, asset_type_hint: str | None = None,
+) -> Stock | None:
     """Devolve a stock existente ou cria-a.
 
-    Tenta validar/enriquecer via Finnhub - primeiro como acção (stock/profile2);
-    se essa vier vazia (símbolo não é uma acção), tenta como ETF (etf/profile)
-    antes de desistir. Se algum pedido falhar (rede, rate limit, key inválida)
-    aceita o ticker na mesma sem metadados — só rejeita quando a Finnhub
-    responde com sucesso a dizer que o símbolo não existe em nenhum dos dois
-    formatos."""
+    Sem `asset_type_hint`: tenta validar/enriquecer via Finnhub - primeiro
+    como acção (stock/profile2); se essa vier vazia (símbolo não é uma
+    acção), tenta como ETF (etf/profile) antes de desistir. Se algum pedido
+    falhar (rede, rate limit, key inválida) aceita o ticker na mesma sem
+    metadados — só rejeita quando a Finnhub responde com sucesso a dizer que
+    o símbolo não existe em nenhum dos dois formatos.
+
+    Com `asset_type_hint` a indicar ETF (campo `type` da Finnhub /search,
+    quando o ticker vem dos resultados de pesquisa - ver TickerSearchResult):
+    salta o stock/profile2 (que seria sempre vazio para um ETF, uma chamada
+    desperdiçada) e, sobretudo, ACEITA o ticker mesmo que o etf/profile não
+    tenha dados nenhuns - bug real corrigido em 2026-07-24: ETFs UCITS
+    europeus fora da cobertura do plano gratuito da Finnhub (ex: VUSA.F)
+    ficavam de fora mesmo sendo tickers válidos, só porque nem stock/profile2
+    nem etf/profile tinham metadados para eles. A pesquisa já sabe que é um
+    ETF real - não faz sentido voltar a exigir prova disso ao profile."""
     ticker = ticker.upper().strip()
     if not ticker:
         return None
@@ -239,18 +283,23 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
     if existing:
         return existing
 
-    asset_type = "stock"
-    try:
-        profile: dict | None = await _finnhub_get("stock/profile2", {"symbol": ticker})
-    except Exception:
-        logger.warning(
-            "Finnhub indisponível a validar '%s' — a adicionar sem metadados por agora",
-            ticker, exc_info=True,
-        )
-        profile = None
+    hint_is_etf = _looks_like_etf_hint(asset_type_hint)
+    asset_type = "etf" if hint_is_etf else "stock"
+    profile: dict | None = None
 
-    if profile is not None and not profile:
-        # Não é uma acção reconhecida - tenta como ETF antes de rejeitar.
+    if not hint_is_etf:
+        try:
+            profile = await _finnhub_get("stock/profile2", {"symbol": ticker})
+        except Exception:
+            logger.warning(
+                "Finnhub indisponível a validar '%s' — a adicionar sem metadados por agora",
+                ticker, exc_info=True,
+            )
+            profile = None
+
+    if hint_is_etf or (profile is not None and not profile):
+        # Não é uma acção reconhecida (ou já sabemos pela pesquisa que é um
+        # ETF) - tenta como ETF antes de rejeitar.
         try:
             etf_data = await _finnhub_get("etf/profile", {"symbol": ticker})
         except Exception:
@@ -259,19 +308,19 @@ async def validate_and_create_stock(db: AsyncSession, ticker: str) -> Stock | No
                 ticker, exc_info=True,
             )
             etf_data = None
-        if etf_data is None:
-            profile = None  # Finnhub ficou inacessível a meio - aceita sem metadados
-        else:
-            # Nomes de campos do /etf/profile não confirmados com payload real
-            # (ao contrário de stock/profile2 e stock/metric, ver topo do
-            # ficheiro) - a documentação pública da Finnhub sugere a forma
-            # {"profile": {...}}. Se 'name'/'currency' vierem sempre vazios
-            # para ETFs válidos, confirmar o formato real e ajustar aqui.
-            etf_profile = etf_data.get("profile") or etf_data
-            if not etf_profile:
-                return None  # nem acção nem ETF - símbolo não existe
+        # Nomes de campos do /etf/profile não confirmados com payload real
+        # (ao contrário de stock/profile2 e stock/metric, ver topo do
+        # ficheiro) - a documentação pública da Finnhub sugere a forma
+        # {"profile": {...}}. Se 'name'/'currency' vierem sempre vazios
+        # para ETFs válidos, confirmar o formato real e ajustar aqui.
+        etf_profile = (etf_data.get("profile") or etf_data) if etf_data else {}
+        if etf_profile:
             profile = etf_profile
             asset_type = "etf"
+        elif hint_is_etf:
+            profile = None  # aceita sem metadados - a pesquisa já confirmou que é um ETF
+        else:
+            return None  # nem acção nem ETF - símbolo não existe
 
     profile = profile or {}
     stock = Stock(

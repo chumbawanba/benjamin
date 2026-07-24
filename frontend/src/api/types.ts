@@ -172,6 +172,14 @@ export interface StockSynthesis {
   categories: CategorySynthesis[];
 }
 
+export interface PeerComparison {
+  ticker: string;
+  name: string | null;
+  pe_ratio: number | string | null;
+  roe: number | string | null;
+  net_margin: number | string | null;
+}
+
 export interface StockDetail {
   stock: Stock;
   last_price: number | null;
@@ -183,6 +191,7 @@ export interface StockDetail {
   strategy_name: string | null;
   criteria: EvaluationCriterion[];
   synthesis: StockSynthesis;
+  peers: PeerComparison[];
 }
 
 export interface StrategySignal {

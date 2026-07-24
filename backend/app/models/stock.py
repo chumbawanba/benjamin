@@ -47,4 +47,13 @@ class Stock(Base):
     # repetidas quando a Finnhub rejeita o símbolo (mesmo padrão de
     # last_backfill_attempt_at/last_quote_at).
     last_fundamentals_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tickers "parecidos" (mesma indústria, Finnhub /stock/peers), separados
+    # por vírgula - usado na comparação de peers da StockDetail. Cacheado com
+    # PEERS_REFRESH_COOLDOWN (dias, não minutos/horas como os outros campos
+    # "last_*_attempt_at") porque a composição de peers de uma empresa muda
+    # raramente - sem isto, cada visita à StockDetail gastaria 1 chamada
+    # Finnhub extra à toa (mesmo princípio dos outros campos de cooldown
+    # acima: proteger a quota partilhada).
+    peers_cache: Mapped[str | None] = mapped_column(String(200))
+    peers_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

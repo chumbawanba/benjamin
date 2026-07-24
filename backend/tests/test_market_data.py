@@ -141,6 +141,55 @@ async def test_validate_and_create_stock_defaults_to_stock_type(db_session):
     mock.assert_called_once()  # só stock/profile2 - nunca chegou a tentar etf/profile
 
 
+async def test_validate_and_create_stock_hint_skips_stock_profile2(db_session):
+    """Com asset_type_hint a indicar ETF (campo `type` da pesquisa), nem
+    tenta stock/profile2 - vai direto ao etf/profile (poupa 1 chamada)."""
+    async def fake_finnhub_get(path, params):
+        if path == "etf/profile":
+            return {"profile": {"name": "SPDR S&P 500 ETF Trust", "currency": "USD"}}
+        raise AssertionError(f"unexpected path {path} - não devia tentar stock/profile2")
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=fake_finnhub_get)):
+        stock = await market_data.validate_and_create_stock(db_session, "SPY", asset_type_hint="ETF")
+
+    assert stock is not None
+    assert stock.asset_type == "etf"
+    assert stock.name == "SPDR S&P 500 ETF Trust"
+
+
+async def test_validate_and_create_stock_hint_accepts_etf_without_any_metadata(db_session):
+    """Bug real corrigido em 2026-07-24: um ETF UCITS europeu fora da
+    cobertura do plano gratuito (ex: VUSA.F) não tem dados nem em
+    stock/profile2 nem em etf/profile - com o hint da pesquisa a confirmar
+    que é mesmo um ETF, deve ser aceite sem metadados em vez de rejeitado."""
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value={})):
+        stock = await market_data.validate_and_create_stock(db_session, "VUSA.F", asset_type_hint="ETP")
+
+    assert stock is not None
+    assert stock.asset_type == "etf"
+    assert stock.name is None
+
+
+async def test_validate_and_create_stock_hint_survives_etf_profile_exception(db_session):
+    with patch(
+        "app.services.market_data._finnhub_get",
+        new=AsyncMock(side_effect=Exception("429 Too Many Requests")),
+    ):
+        stock = await market_data.validate_and_create_stock(db_session, "VUSA.F", asset_type_hint="ETF")
+
+    assert stock is not None
+    assert stock.asset_type == "etf"
+
+
+async def test_validate_and_create_stock_without_hint_keeps_previous_behavior(db_session):
+    """Sem hint (ou hint que não parece ETF), comportamento inalterado: um
+    símbolo sem dados em nenhum dos dois formatos continua rejeitado."""
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value={})):
+        stock = await market_data.validate_and_create_stock(db_session, "NAOEXISTE", asset_type_hint="Common Stock")
+
+    assert stock is None
+
+
 async def test_backfill_profile_falls_back_to_etf(db_session):
     stock = Stock(ticker="VWCE")  # simula stock criada sem metadados
     db_session.add(stock)
@@ -646,3 +695,57 @@ async def test_get_market_pulse_survives_finnhub_failure():
     assert len(pulse["indices"]) == len(market_data.MARKET_INDEX_PROXIES)
     assert all(idx["change_pct"] is None for idx in pulse["indices"])
     assert pulse["news"] == []
+
+
+async def test_get_peers_cached_fetches_and_stores(db_session):
+    stock = Stock(ticker="AAPL")
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=["MSFT", "GOOGL"])):
+        peers = await market_data.get_peers_cached(db_session, stock)
+
+    assert peers == ["MSFT", "GOOGL"]
+    assert stock.peers_cache == "MSFT,GOOGL"
+    assert stock.peers_fetched_at is not None
+
+
+async def test_get_peers_cached_skips_finnhub_within_cooldown(db_session):
+    stock = Stock(
+        ticker="AAPL", peers_cache="MSFT,GOOGL",
+        peers_fetched_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(side_effect=AssertionError("não devia ser chamado"))):
+        peers = await market_data.get_peers_cached(db_session, stock)
+
+    assert peers == ["MSFT", "GOOGL"]
+
+
+async def test_get_peers_cached_refetches_after_cooldown_expires(db_session):
+    stock = Stock(
+        ticker="AAPL", peers_cache="MSFT",
+        peers_fetched_at=datetime.now(timezone.utc) - timedelta(days=8),
+    )
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=["NVDA"])):
+        peers = await market_data.get_peers_cached(db_session, stock)
+
+    assert peers == ["NVDA"]
+    assert stock.peers_cache == "NVDA"
+
+
+async def test_get_peers_cached_empty_result_stores_none(db_session):
+    stock = Stock(ticker="AAPL")
+    db_session.add(stock)
+    await db_session.flush()
+
+    with patch("app.services.market_data._finnhub_get", new=AsyncMock(return_value=[])):
+        peers = await market_data.get_peers_cached(db_session, stock)
+
+    assert peers == []
+    assert stock.peers_cache is None
