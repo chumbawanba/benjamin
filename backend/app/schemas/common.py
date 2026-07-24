@@ -125,6 +125,18 @@ class FundamentalsOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CategorySynthesisOut(BaseModel):
+    category: str
+    label: str
+    classification: str | None  # "favoravel" | "neutro" | "desfavoravel" | "misto" | None (sem dados)
+    reason: str | None
+
+
+class StockSynthesisOut(BaseModel):
+    score: float | None
+    categories: list[CategorySynthesisOut]
+
+
 class EvaluationCriterionOut(BaseModel):
     name: str
     metric: str
@@ -148,6 +160,7 @@ class StockDetailOut(BaseModel):
     latest_evaluation: EvaluationSummaryOut | None
     strategy_name: str | None
     criteria: list[EvaluationCriterionOut]
+    synthesis: StockSynthesisOut
 
 
 class TickerSearchResult(BaseModel):

@@ -15,6 +15,7 @@ from app.models import (
     Evaluation, FundamentalsSnapshot, Stock, StrategyItem, StrategyTemplate, User, WatchlistItem,
 )
 from app.schemas.common import (
+    CategorySynthesisOut,
     EvaluationCriterionOut,
     EvaluationSummaryOut,
     FundamentalsOut,
@@ -23,6 +24,7 @@ from app.schemas.common import (
     PricePointOut,
     StockDetailOut,
     StockOut,
+    StockSynthesisOut,
     SuggestionOut,
     TickerSearchResult,
     WatchlistItemIn,
@@ -30,7 +32,7 @@ from app.schemas.common import (
     WatchlistReorderIn,
 )
 from app.security import get_current_user
-from app.services import agent, indicators, market_data
+from app.services import agent, indicators, market_data, synthesis
 from app.services.rate_limit import rate_limit_user
 from app.services.indicators_core import INDICATORS
 
@@ -202,6 +204,8 @@ async def watchlist_item_detail(
         )
         for key, spec in INDICATORS.items()
     ]
+    # Reaproveita os valores já calculados acima - sem pedidos extra à BD.
+    synthesis_result = synthesis.compute_synthesis({iv.key: iv.value for iv in indicator_values})
 
     fundamentals_row = (
         await db.execute(
@@ -256,6 +260,16 @@ async def watchlist_item_detail(
         latest_evaluation=EvaluationSummaryOut.model_validate(latest_eval) if latest_eval else None,
         strategy_name=strategy_name,
         criteria=criteria,
+        synthesis=StockSynthesisOut(
+            score=synthesis_result.score,
+            categories=[
+                CategorySynthesisOut(
+                    category=c.category, label=c.label,
+                    classification=c.classification, reason=c.reason,
+                )
+                for c in synthesis_result.categories
+            ],
+        ),
     )
 
 

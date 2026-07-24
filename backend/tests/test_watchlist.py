@@ -350,6 +350,18 @@ async def test_watchlist_item_detail(client, db_session, user_a, seeded_stock):
     assert body["latest_evaluation"] is None  # nenhuma estrategia ativa nesta suite
     assert body["criteria"] == []
 
+    # síntese: seeded_stock só define pe_ratio (12.0, favorável) nos
+    # fundamentais - crescimento/rendibilidade ficam sem dados (None), não
+    # desfavoráveis. RSI fica sobrecomprado (uptrend sintético constante) mas
+    # o preço está bem acima da SMA_50, por isso momentum sai "misto".
+    synthesis = body["synthesis"]
+    assert synthesis["score"] is not None
+    by_category = {c["category"]: c for c in synthesis["categories"]}
+    assert by_category["valuation"]["classification"] == "favoravel"
+    assert by_category["momentum"]["classification"] == "misto"
+    assert by_category["growth"]["classification"] is None
+    assert by_category["profitability"]["classification"] is None
+
 
 async def test_watchlist_item_detail_not_found_for_other_user(client, db_session, user_a, user_b, seeded_stock):
     headers_a = await login(client, "a@test.dev", "password-a")

@@ -5,6 +5,7 @@ import { StockDetail as StockDetailType } from '../api/types';
 import PriceChange from '../components/PriceChange';
 import RecommendationBadge from '../components/RecommendationBadge';
 import Sparkline from '../components/Sparkline';
+import StockSynthesisCard from '../components/StockSynthesisCard';
 import { formatRelativeTime } from '../utils/format';
 
 // Campos Decimal do backend (pydantic) chegam como string em JSON, não number
@@ -186,6 +187,8 @@ export default function StockDetail() {
           {!hasSma200 && ' Histórico ainda insuficiente para a SMA 200 (precisa de 200 dias).'}
         </p>
       </div>
+
+      <StockSynthesisCard synthesis={detail.synthesis} />
 
       <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Indicadores</h2>
       <div className="grid grid-cols-2 gap-2 mb-6">

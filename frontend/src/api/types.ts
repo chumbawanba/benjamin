@@ -158,6 +158,20 @@ export interface EvaluationCriterion {
   contribution: number;
 }
 
+export type SynthesisClassification = 'favoravel' | 'neutro' | 'desfavoravel' | 'misto';
+
+export interface CategorySynthesis {
+  category: string;
+  label: string;
+  classification: SynthesisClassification | null;
+  reason: string | null;
+}
+
+export interface StockSynthesis {
+  score: number | null;
+  categories: CategorySynthesis[];
+}
+
 export interface StockDetail {
   stock: Stock;
   last_price: number | null;
@@ -168,6 +182,7 @@ export interface StockDetail {
   latest_evaluation: EvaluationSummary | null;
   strategy_name: string | null;
   criteria: EvaluationCriterion[];
+  synthesis: StockSynthesis;
 }
 
 export interface StrategySignal {
