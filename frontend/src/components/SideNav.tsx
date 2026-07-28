@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeIcon } from './ThemeToggle';
-import { IconHome, IconLogout, IconSliders, IconWallet } from './icons';
+import { IconBell, IconHome, IconLogout, IconSliders, IconWallet } from './icons';
 
 function linkClass({ isActive }: { isActive: boolean }): string {
   return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
@@ -18,6 +19,7 @@ function linkClass({ isActive }: { isActive: boolean }): string {
 // (Notion, Slack, etc.) - lista vertical de ícone + rótulo.
 export default function SideNav() {
   const { logout } = useAuth();
+  const { unreadCount } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   return (
     <nav className="hidden lg:flex lg:flex-col lg:w-56 lg:shrink-0 lg:h-screen lg:sticky lg:top-0 border-r border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-4">
@@ -38,6 +40,17 @@ export default function SideNav() {
         <NavLink to="/workspace" className={linkClass}>
           <IconSliders />
           Desenhar estratégia
+        </NavLink>
+        <NavLink to="/notifications" className={linkClass}>
+          <span className="relative">
+            <IconBell />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] leading-[14px] text-center font-semibold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </span>
+          Notificações
         </NavLink>
       </div>
 

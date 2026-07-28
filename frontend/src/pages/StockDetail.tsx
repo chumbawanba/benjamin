@@ -84,13 +84,27 @@ export default function StockDetail() {
   const [error, setError] = useState<string | null>(null);
   const [chartPeriod, setChartPeriod] = useState<(typeof CHART_PERIODS)[number]['label']>('3M');
 
+  // Rascunho dos campos de alerta - strings nos inputs (permite campo vazio
+  // enquanto se digita), convertidos para número/None só ao gravar.
+  const [buyInput, setBuyInput] = useState('');
+  const [sellInput, setSellInput] = useState('');
+  const [alertOnSignal, setAlertOnSignal] = useState(false);
+  const [savingAlerts, setSavingAlerts] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [alertsSaved, setAlertsSaved] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       try {
         const data = await api.get<StockDetailType>(`/watchlist/${id}/detail`);
-        if (!cancelled) setDetail(data);
+        if (!cancelled) {
+          setDetail(data);
+          setBuyInput(data.target_buy_price !== null ? String(data.target_buy_price) : '');
+          setSellInput(data.target_sell_price !== null ? String(data.target_sell_price) : '');
+          setAlertOnSignal(data.alert_on_signal);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'Erro ao carregar detalhe');
       } finally {
@@ -102,6 +116,24 @@ export default function StockDetail() {
       cancelled = true;
     };
   }, [id]);
+
+  async function saveAlerts() {
+    setSavingAlerts(true);
+    setAlertsError(null);
+    setAlertsSaved(false);
+    try {
+      await api.put(`/watchlist/${id}`, {
+        target_buy_price: buyInput.trim() ? Number(buyInput) : null,
+        target_sell_price: sellInput.trim() ? Number(sellInput) : null,
+        alert_on_signal: alertOnSignal,
+      });
+      setAlertsSaved(true);
+    } catch (err) {
+      setAlertsError(err instanceof ApiError ? err.message : 'Erro ao gravar alertas');
+    } finally {
+      setSavingAlerts(false);
+    }
+  }
 
   if (loading) return <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>;
 
@@ -187,6 +219,60 @@ export default function StockDetail() {
           Últimos {visibleHistory.length} dias com fecho registado.
           {!hasSma200 && ' Histórico ainda insuficiente para a SMA 200 (precisa de 200 dias).'}
         </p>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-3">Alertas</h2>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <label className="block">
+            <span className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Preço-alvo de compra</span>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              value={buyInput}
+              onChange={(e) => setBuyInput(e.target.value)}
+              placeholder="—"
+              className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs text-gray-500 dark:text-slate-400 mb-1">Preço-alvo de venda</span>
+            <input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              value={sellInput}
+              onChange={(e) => setSellInput(e.target.value)}
+              placeholder="—"
+              className="w-full bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm"
+            />
+          </label>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300 mb-3">
+          <input
+            type="checkbox"
+            checked={alertOnSignal}
+            onChange={(e) => setAlertOnSignal(e.target.checked)}
+            className="w-4 h-4 accent-navy-600 shrink-0"
+          />
+          Avisar quando a avaliação mudar para BUY ou SELL
+        </label>
+        <p className="text-xs text-gray-400 dark:text-slate-500 mb-3">
+          Preenche um dos preços-alvo e/ou ativa o aviso de sinal para receberes uma notificação (email e no
+          centro de notificações) quando a condição se verificar.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={saveAlerts}
+            disabled={savingAlerts}
+            className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
+            {savingAlerts ? 'A gravar…' : 'Gravar alertas'}
+          </button>
+          {alertsSaved && <span className="text-xs text-green-600 dark:text-emerald-400">Gravado.</span>}
+          {alertsError && <span className="text-xs text-red-600 dark:text-rose-400">{alertsError}</span>}
+        </div>
       </div>
 
       <StockSynthesisCard synthesis={detail.synthesis} />

@@ -323,9 +323,62 @@ async def test_reorder_ignores_other_users_ids(client, user_a, user_b):
     )
     assert resp.status_code == 204
 
-    resp = await client.get("/watchlist", headers=headers_a)
-    assert len(resp.json()) == 1
-    assert resp.json()[0]["stock"]["ticker"] == "AAPL"
+
+async def test_update_watchlist_item_sets_alert_fields(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        r = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+    item_id = r.json()["id"]
+
+    resp = await client.put(
+        f"/watchlist/{item_id}",
+        json={"target_buy_price": "150", "target_sell_price": "200", "alert_on_signal": True},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert float(body["target_buy_price"]) == 150.0
+    assert float(body["target_sell_price"]) == 200.0
+    assert body["alert_on_signal"] is True
+
+
+async def test_update_watchlist_item_replaces_fields_fully(client, user_a):
+    """PUT substitui os 3 campos de cada vez (sem histórico) - omitir um
+    campo no body volta-o a None/False, não o deixa como estava."""
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        r = await client.post(
+            "/watchlist", json={"ticker": "AAPL", "target_buy_price": "150"}, headers=headers
+        )
+    item_id = r.json()["id"]
+
+    resp = await client.put(f"/watchlist/{item_id}", json={"target_sell_price": "200"}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["target_buy_price"] is None
+    assert float(body["target_sell_price"]) == 200.0
+    assert body["alert_on_signal"] is False
+
+
+async def test_update_watchlist_item_not_found_for_other_user(client, user_a, user_b):
+    headers_a = await login(client, "a@test.dev", "password-a")
+    headers_b = await login(client, "b@test.dev", "password-b")
+    with mock_market_data_valid():
+        r = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers_a)
+
+    resp = await client.put(
+        f"/watchlist/{r.json()['id']}", json={"alert_on_signal": True}, headers=headers_b
+    )
+    assert resp.status_code == 404
+
+
+async def test_update_watchlist_item_requires_auth(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    with mock_market_data_valid():
+        r = await client.post("/watchlist", json={"ticker": "AAPL"}, headers=headers)
+
+    resp = await client.put(f"/watchlist/{r.json()['id']}", json={"alert_on_signal": True})
+    assert resp.status_code == 401
 
 
 async def test_add_to_watchlist_runs_active_strategies_immediately(client, db_session, user_a, seeded_stock):
@@ -385,6 +438,22 @@ async def test_watchlist_item_detail(client, db_session, user_a, seeded_stock):
     resp = await client.get(f"/watchlist/{item_id}/detail", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
+
+    # alertas ainda não configurados -> valores por omissão
+    assert body["target_buy_price"] is None
+    assert body["target_sell_price"] is None
+    assert body["alert_on_signal"] is False
+
+    await client.put(
+        f"/watchlist/{item_id}",
+        json={"target_buy_price": "150.5", "target_sell_price": "200", "alert_on_signal": True},
+        headers=headers,
+    )
+    resp = await client.get(f"/watchlist/{item_id}/detail", headers=headers)
+    body = resp.json()
+    assert float(body["target_buy_price"]) == 150.5
+    assert float(body["target_sell_price"]) == 200.0
+    assert body["alert_on_signal"] is True
 
     assert body["stock"]["ticker"] == "AAPL"
     assert len(body["price_history"]) > 0

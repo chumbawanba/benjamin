@@ -54,3 +54,12 @@ export function IconLogout({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+export function IconBell({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" />
+      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+    </svg>
+  );
+}

@@ -28,6 +28,8 @@ export interface WatchlistItem {
   target_sell_price: number | null;
   added_at: string;
   display_order: number;
+  // Alerta de mudança de sinal (ver PUT /watchlist/{id}) - opt-in por ação.
+  alert_on_signal: boolean;
   latest_evaluation: EvaluationSummary | null;
   last_price: number | null;
   price_change_pct: number | null;
@@ -201,6 +203,25 @@ export interface StockDetail {
   criteria: EvaluationCriterion[];
   synthesis: StockSynthesis;
   peers: PeerComparison[];
+  target_buy_price: number | null;
+  target_sell_price: number | null;
+  alert_on_signal: boolean;
+}
+
+// Ver app/models/notification.py - kind: 'price_buy' | 'price_sell' |
+// 'signal_buy' | 'signal_sell' | 'weekly_report'.
+export interface Notification {
+  id: string;
+  kind: string;
+  message: string;
+  stock_id: string | null;
+  created_at: string;
+  read_at: string | null;
+}
+
+export interface NotificationPreferences {
+  email_reports_enabled: boolean;
+  email_alerts_enabled: boolean;
 }
 
 export interface StrategySignal {

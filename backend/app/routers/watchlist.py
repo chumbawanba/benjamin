@@ -30,6 +30,7 @@ from app.schemas.common import (
     TickerSearchResult,
     WatchlistItemIn,
     WatchlistItemOut,
+    WatchlistItemUpdateIn,
     WatchlistPulseOut,
     WatchlistReorderIn,
 )
@@ -336,6 +337,9 @@ async def watchlist_item_detail(
             ],
         ),
         peers=peers_out,
+        target_buy_price=item.target_buy_price,
+        target_sell_price=item.target_sell_price,
+        alert_on_signal=item.alert_on_signal,
     )
 
 
@@ -365,6 +369,33 @@ async def reorder_watchlist(
             .values(display_order=index)
         )
     await db.commit()
+
+
+@router.put("/{item_id}", response_model=WatchlistItemOut)
+async def update_watchlist_item(
+    item_id: uuid.UUID,
+    body: WatchlistItemUpdateIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Configura alertas de uma ação já na watchlist (preço-alvo e/ou aviso
+    de mudança de sinal - ver app/services/alerts.py). Substitui os 3 campos
+    de cada vez (sem histórico), mesmo padrão do PUT /portfolio/{position_id}.
+    Declarado depois de /reorder de propósito - rotas estáticas antes de
+    rotas dinâmicas do mesmo método, para nunca haver ambiguidade de routing."""
+    item = (
+        await db.execute(
+            select(WatchlistItem).options(selectinload(WatchlistItem.stock))
+            .where(WatchlistItem.id == item_id, WatchlistItem.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Não encontrado")
+    item.target_buy_price = body.target_buy_price
+    item.target_sell_price = body.target_sell_price
+    item.alert_on_signal = body.alert_on_signal
+    await db.commit()
+    return await _to_dto(db, user.id, item)
 
 
 @router.post("", response_model=WatchlistItemOut, status_code=201)

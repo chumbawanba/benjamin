@@ -85,11 +85,27 @@ class WatchlistItemOut(BaseModel):
     target_sell_price: Decimal | None
     added_at: datetime
     display_order: int
+    # Alerta de mudança de sinal (ver app/services/alerts.py) - opt-in por
+    # ação. O alerta de preço não precisa de campo próprio: já é opt-in
+    # implícito (só dispara se target_buy_price/target_sell_price estiver
+    # preenchido).
+    alert_on_signal: bool = False
     latest_evaluation: EvaluationSummaryOut | None = None
     last_price: Decimal | None = None
     price_change_pct: Decimal | None = None
 
     model_config = {"from_attributes": True}
+
+
+class WatchlistItemUpdateIn(BaseModel):
+    """PUT /watchlist/{item_id} - substitui os 3 campos (sem histórico),
+    mesmo padrão do PUT /portfolio/{position_id}. Usado para configurar
+    alertas depois de a ação já estar na watchlist (a criação via POST
+    /watchlist só aceita target_buy_price/target_sell_price no momento de
+    adicionar - alert_on_signal só existe aqui)."""
+    target_buy_price: Decimal | None = None
+    target_sell_price: Decimal | None = None
+    alert_on_signal: bool = False
 
 
 class WatchlistReorderIn(BaseModel):
@@ -175,6 +191,12 @@ class StockDetailOut(BaseModel):
     criteria: list[EvaluationCriterionOut]
     synthesis: StockSynthesisOut
     peers: list[PeerComparisonOut]
+    # Configuração de alertas do item da watchlist (ver PUT /watchlist/{item_id}
+    # em WatchlistItemUpdateIn) - incluída aqui para a página StockDetail poder
+    # mostrar/editar os alertas sem um pedido extra à API.
+    target_buy_price: Decimal | None = None
+    target_sell_price: Decimal | None = None
+    alert_on_signal: bool = False
 
 
 class TickerSearchResult(BaseModel):
@@ -410,3 +432,27 @@ class StrategySignalGroupOut(BaseModel):
     strategy_name: str
     horizon: str | None
     signals: list[StrategySignalOut]
+
+
+# ---- Notificações / alertas (ver app/services/alerts.py, routers/notifications.py) ----
+class NotificationOut(BaseModel):
+    id: uuid.UUID
+    kind: str
+    message: str
+    stock_id: uuid.UUID | None
+    created_at: datetime
+    read_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationPreferencesOut(BaseModel):
+    email_reports_enabled: bool
+    email_alerts_enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class NotificationPreferencesIn(BaseModel):
+    email_reports_enabled: bool
+    email_alerts_enabled: bool

@@ -8,8 +8,8 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import analyst, auth, evaluations, portfolio, strategies, waitlist, watchlist
-from app.scheduler import daily_refresh_job, weekly_job
+from app.routers import analyst, auth, evaluations, notifications, portfolio, strategies, waitlist, watchlist
+from app.scheduler import alerts_job, daily_refresh_job, weekly_job
 
 
 @asynccontextmanager
@@ -18,6 +18,9 @@ async def lifespan(app: FastAPI):
     if settings.scheduler_enabled:
         scheduler = AsyncIOScheduler(timezone="UTC")
         scheduler.add_job(daily_refresh_job, CronTrigger(hour=6, minute=0))
+        # 15 min depois do refresh de mercado, para os preços já estarem
+        # atualizados quando os alertas de preço são verificados.
+        scheduler.add_job(alerts_job, CronTrigger(hour=6, minute=15))
         scheduler.add_job(weekly_job, CronTrigger(day_of_week="sat", hour=8, minute=0))
         scheduler.start()
     yield
@@ -48,6 +51,7 @@ app.include_router(evaluations.router, prefix=API)
 app.include_router(analyst.router, prefix=API)
 app.include_router(portfolio.router, prefix=API)
 app.include_router(waitlist.router, prefix=API)
+app.include_router(notifications.router, prefix=API)
 
 
 @app.get("/health")

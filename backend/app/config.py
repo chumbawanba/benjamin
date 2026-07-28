@@ -10,8 +10,10 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    summary_email_to: str = ""
     scheduler_enabled: bool = True
+    # Usado para montar o link de cancelar subscrição nos emails (ver
+    # app/services/email_service.py) - sem barra final.
+    app_base_url: str = "https://beta.appbenjamin.com"
     finnhub_api_key: str = ""
     twelvedata_api_key: str = ""
     openai_api_key: str = ""

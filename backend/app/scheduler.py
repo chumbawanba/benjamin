@@ -1,11 +1,12 @@
-"""Jobs agendados: refresh diário de dados de mercado + avaliação/resumo semanal."""
+"""Jobs agendados: refresh diário de dados de mercado, alertas diários de
+preço/sinal, e resumo periódico semanal."""
 import logging
 
 from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import Stock, StrategyTemplate, User, WatchlistItem
-from app.services import agent, email_service, market_data
+from app.services import agent, alerts, email_service, market_data
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +33,23 @@ async def daily_refresh_job() -> int:
     return processed
 
 
+async def alerts_job() -> int:
+    """Deteta alertas de preço-alvo atingido e mudança de sinal (ver
+    app/services/alerts.py), independente do weekly_job - corre diariamente
+    para os alertas serem atempados. Devolve o nº de notificações criadas
+    (para testes)."""
+    async with SessionLocal() as db:
+        created = await alerts.check_alerts(db)
+    return len(created)
+
+
 async def weekly_job() -> list[dict]:
-    """Corre as avaliações semanais. Devolve as linhas do resumo (para testes)."""
-    rows: list[dict] = []
+    """Corre as avaliações semanais e envia um resumo por email a cada
+    utilizador (só com as avaliações dele - antes desta correção ia tudo
+    misturado para um único SUMMARY_EMAIL_TO fixo, resquício de quando a app
+    ainda era single-user). Respeita User.email_reports_enabled. Devolve as
+    linhas de todos os utilizadores combinadas (para testes)."""
+    all_rows: list[dict] = []
     async with SessionLocal() as db:
         users = (await db.execute(select(User))).scalars().all()
         for user in users:
@@ -49,11 +64,12 @@ async def weekly_job() -> list[dict]:
                     .where(WatchlistItem.user_id == user.id)
                 )
             ).all()
+            user_rows: list[dict] = []
             for template in templates:
                 for item, stock in items:
                     try:
                         ev = await agent.evaluate(db, stock.id, template.id, user.id)
-                        rows.append({
+                        user_rows.append({
                             "ticker": stock.ticker,
                             "buy_score": float(ev.buy_score),
                             "sell_score": float(ev.sell_score),
@@ -63,6 +79,8 @@ async def weekly_job() -> list[dict]:
                         })
                     except Exception:
                         logger.exception("Falha ao avaliar %s / %s", stock.ticker, template.name)
-        await db.commit()
-    email_service.send_summary(rows)
-    return rows
+            await db.commit()
+            if user.email_reports_enabled:
+                email_service.send_summary(user.email, user_rows, user.unsubscribe_token)
+            all_rows += user_rows
+    return all_rows

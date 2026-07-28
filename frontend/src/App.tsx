@@ -3,9 +3,11 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AnalystChatProvider } from './context/AnalystChatContext';
 import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import FxRates from './pages/FxRates';
 import Login from './pages/Login';
+import Notifications from './pages/Notifications';
 import Overview from './pages/Overview';
 import Portfolio from './pages/Portfolio';
 import Register from './pages/Register';
@@ -23,13 +25,20 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route element={<ProtectedRoute />}>
-                <Route element={<Layout />}>
+                <Route
+                  element={
+                    <NotificationProvider>
+                      <Layout />
+                    </NotificationProvider>
+                  }
+                >
                   <Route path="/" element={<Overview />} />
                   <Route path="/workspace" element={<StrategyWorkspace />} />
                   <Route path="/portfolio" element={<Portfolio />} />
                   <Route path="/portfolio/fx-rates" element={<FxRates />} />
                   <Route path="/stocks/:id" element={<StockDetail />} />
                   <Route path="/strategies/:id" element={<StrategyEditor />} />
+                  <Route path="/notifications" element={<Notifications />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

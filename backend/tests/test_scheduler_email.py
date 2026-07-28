@@ -16,11 +16,14 @@ def test_build_summary_html():
 
 def test_send_summary_without_smtp_config(caplog):
     from app.services.email_service import send_summary
-    assert send_summary([{"ticker": "X", "buy_score": 0, "sell_score": 0,
-                          "recommendation": "HOLD", "price": None,
-                          "strategy_name": "T"}]) is False
+    assert send_summary(
+        "user@test.dev",
+        [{"ticker": "X", "buy_score": 0, "sell_score": 0,
+          "recommendation": "HOLD", "price": None, "strategy_name": "T"}],
+        "sometoken",
+    ) is False
 
 
 def test_send_summary_empty_rows():
     from app.services.email_service import send_summary
-    assert send_summary([]) is False
+    assert send_summary("user@test.dev", [], "sometoken") is False

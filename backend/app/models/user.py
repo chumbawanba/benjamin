@@ -1,7 +1,8 @@
+import secrets
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,6 +11,10 @@ from app.database import Base
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def new_unsubscribe_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 class User(Base):
@@ -36,3 +41,16 @@ class User(Base):
     # utilizadores criados antes desta funcionalidade não têm este campo
     # preenchido retroativamente.
     accepted_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Notificações/alertas (ver app/services/alerts.py, app/routers/notifications.py):
+    # email_reports_enabled controla o resumo periódico (weekly_job);
+    # email_alerts_enabled controla os emails de alerta de preço/sinal
+    # disparados pelo job diário. As notificações in-app (tabela
+    # Notification) são sempre criadas independentemente destes toggles -
+    # só controlam se, além disso, sai um email. unsubscribe_token permite um
+    # link de cancelar subscrição sem login (obrigatório em qualquer email
+    # periódico/marketing-like) - gerado uma vez, nunca muda.
+    email_reports_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    email_alerts_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    unsubscribe_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, default=new_unsubscribe_token
+    )
