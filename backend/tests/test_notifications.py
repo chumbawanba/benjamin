@@ -77,21 +77,61 @@ async def test_get_preferences_defaults_enabled(client, user_a):
     headers = await login(client, "a@test.dev", "password-a")
     resp = await client.get("/notifications/preferences", headers=headers)
     assert resp.status_code == 200
-    assert resp.json() == {"email_reports_enabled": True, "email_alerts_enabled": True}
+    # report_day_of_week=5/report_hour=8 (sábado 08:00 UTC) preserva o
+    # comportamento do antigo cron fixo para quem nunca alterou a preferência.
+    assert resp.json() == {
+        "email_reports_enabled": True, "email_alerts_enabled": True,
+        "report_day_of_week": 5, "report_hour": 8,
+    }
 
 
 async def test_update_preferences(client, user_a):
     headers = await login(client, "a@test.dev", "password-a")
     resp = await client.put(
         "/notifications/preferences",
-        json={"email_reports_enabled": False, "email_alerts_enabled": True},
+        json={
+            "email_reports_enabled": False, "email_alerts_enabled": True,
+            "report_day_of_week": 2, "report_hour": 19,
+        },
         headers=headers,
     )
     assert resp.status_code == 200
-    assert resp.json() == {"email_reports_enabled": False, "email_alerts_enabled": True}
+    assert resp.json() == {
+        "email_reports_enabled": False, "email_alerts_enabled": True,
+        "report_day_of_week": 2, "report_hour": 19,
+    }
 
     resp = await client.get("/notifications/preferences", headers=headers)
-    assert resp.json()["email_reports_enabled"] is False
+    body = resp.json()
+    assert body["email_reports_enabled"] is False
+    assert body["report_day_of_week"] == 2
+    assert body["report_hour"] == 19
+
+
+async def test_update_preferences_rejects_invalid_day_of_week(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.put(
+        "/notifications/preferences",
+        json={
+            "email_reports_enabled": True, "email_alerts_enabled": True,
+            "report_day_of_week": 7, "report_hour": 8,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
+async def test_update_preferences_rejects_invalid_hour(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.put(
+        "/notifications/preferences",
+        json={
+            "email_reports_enabled": True, "email_alerts_enabled": True,
+            "report_day_of_week": 0, "report_hour": 24,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
 
 
 async def test_unsubscribe_disables_both_email_toggles(client, db_session, user_a):

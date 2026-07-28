@@ -9,7 +9,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine
 from app.routers import analyst, auth, evaluations, notifications, portfolio, strategies, waitlist, watchlist
-from app.scheduler import alerts_job, daily_refresh_job, weekly_job
+from app.scheduler import alerts_job, daily_refresh_job, report_job
 
 
 @asynccontextmanager
@@ -21,7 +21,10 @@ async def lifespan(app: FastAPI):
         # 15 min depois do refresh de mercado, para os preços já estarem
         # atualizados quando os alertas de preço são verificados.
         scheduler.add_job(alerts_job, CronTrigger(hour=6, minute=15))
-        scheduler.add_job(weekly_job, CronTrigger(day_of_week="sat", hour=8, minute=0))
+        # Corre todas as horas (em vez de um cron fixo semanal) - report_job
+        # decide por utilizador se é a hora certa de enviar, com base nas
+        # preferências de cada um (ver GET/PUT /notifications/preferences).
+        scheduler.add_job(report_job, CronTrigger(minute=0))
         scheduler.start()
     yield
     if scheduler:

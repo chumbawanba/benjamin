@@ -55,7 +55,7 @@ def build_summary_html(rows: list[dict]) -> str:
 
 
 def send_summary(to_email: str, rows: list[dict], unsubscribe_token: str) -> bool:
-    """Resumo periódico (ver scheduler.py::weekly_job) - um email por
+    """Resumo periódico (ver scheduler.py::report_job) - um email por
     utilizador, só com as avaliações dele (antes desta função ser
     parametrizada por utilizador, ia tudo misturado para um único
     SUMMARY_EMAIL_TO fixo - bug de quando a app ainda era single-user)."""

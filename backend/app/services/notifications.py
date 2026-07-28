@@ -1,6 +1,6 @@
 """Centro de notificações in-app + disparo de email (opcional, por
 preferência do utilizador). Usado por app/services/alerts.py (preço/sinal) e
-scheduler.py::weekly_job (resumo periódico)."""
+scheduler.py::report_job (resumo periódico)."""
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession

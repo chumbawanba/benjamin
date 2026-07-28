@@ -2,7 +2,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,7 +42,7 @@ class User(Base):
     # preenchido retroativamente.
     accepted_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Notificações/alertas (ver app/services/alerts.py, app/routers/notifications.py):
-    # email_reports_enabled controla o resumo periódico (weekly_job);
+    # email_reports_enabled controla o resumo periódico (report_job);
     # email_alerts_enabled controla os emails de alerta de preço/sinal
     # disparados pelo job diário. As notificações in-app (tabela
     # Notification) são sempre criadas independentemente destes toggles -
@@ -54,3 +54,14 @@ class User(Base):
     unsubscribe_token: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False, default=new_unsubscribe_token
     )
+    # Dia/hora (sempre UTC, ver CLAUDE.md) em que o utilizador escolhe receber o
+    # resumo periódico - substitui o antigo cron fixo (sáb 08:00 UTC para
+    # todos). report_day_of_week segue datetime.weekday() (0=segunda ...
+    # 6=domingo); os valores por omissão preservam o comportamento anterior.
+    # last_report_sent_at evita reenviar o mesmo resumo se o job (agora
+    # horário, ver scheduler.py::report_job) correr mais que uma vez na
+    # hora-alvo, e garante cadência semanal mesmo que o utilizador mude as
+    # preferências a meio da semana.
+    report_day_of_week: Mapped[int] = mapped_column(Integer, default=5, server_default="5", nullable=False)
+    report_hour: Mapped[int] = mapped_column(Integer, default=8, server_default="8", nullable=False)
+    last_report_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -449,6 +449,11 @@ class NotificationOut(BaseModel):
 class NotificationPreferencesOut(BaseModel):
     email_reports_enabled: bool
     email_alerts_enabled: bool
+    # Dia/hora (UTC) escolhidos para o resumo periódico - ver
+    # app/scheduler.py::report_job. report_day_of_week segue
+    # datetime.weekday() (0=segunda ... 6=domingo).
+    report_day_of_week: int
+    report_hour: int
 
     model_config = {"from_attributes": True}
 
@@ -456,3 +461,5 @@ class NotificationPreferencesOut(BaseModel):
 class NotificationPreferencesIn(BaseModel):
     email_reports_enabled: bool
     email_alerts_enabled: bool
+    report_day_of_week: int = Field(ge=0, le=6)
+    report_hour: int = Field(ge=0, le=23)

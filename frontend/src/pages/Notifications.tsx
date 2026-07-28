@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useNotifications } from '../context/NotificationContext';
 import { formatRelativeTime } from '../utils/format';
+import { localToUtcSchedule, utcToLocalSchedule, WEEKDAY_LABELS } from '../utils/schedule';
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => h);
 
 // Rótulo curto por tipo de notificação (ver app/models/notification.py::kind) -
 // o texto completo já vem em message, isto é só um selo visual rápido.
@@ -26,6 +29,22 @@ export default function Notifications() {
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [prefsError, setPrefsError] = useState<string | null>(null);
 
+  // Dia/hora do resumo semanal, em hora LOCAL do browser (o backend guarda
+  // sempre em UTC - ver utils/schedule.ts). Inicializado quando as
+  // preferências chegam do contexto.
+  const [scheduleDay, setScheduleDay] = useState(0);
+  const [scheduleHour, setScheduleHour] = useState(8);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleSaved, setScheduleSaved] = useState(false);
+
+  useEffect(() => {
+    if (!preferences) return;
+    const local = utcToLocalSchedule(preferences.report_day_of_week, preferences.report_hour);
+    setScheduleDay(local.day);
+    setScheduleHour(local.hour);
+  }, [preferences]);
+
   async function togglePref(key: 'email_reports_enabled' | 'email_alerts_enabled') {
     if (!preferences) return;
     setSavingPrefs(true);
@@ -36,6 +55,22 @@ export default function Notifications() {
       setPrefsError('Erro ao gravar preferências');
     } finally {
       setSavingPrefs(false);
+    }
+  }
+
+  async function saveSchedule() {
+    if (!preferences) return;
+    setSavingSchedule(true);
+    setScheduleError(null);
+    setScheduleSaved(false);
+    try {
+      const utc = localToUtcSchedule(scheduleDay, scheduleHour);
+      await updatePreferences({ ...preferences, report_day_of_week: utc.day, report_hour: utc.hour });
+      setScheduleSaved(true);
+    } catch {
+      setScheduleError('Erro ao gravar horário');
+    } finally {
+      setSavingSchedule(false);
     }
   }
 
@@ -62,6 +97,43 @@ export default function Notifications() {
                 className="w-4 h-4 accent-navy-600 shrink-0"
               />
             </label>
+
+            {preferences.email_reports_enabled && (
+              <div className="pl-0 flex items-center gap-2 flex-wrap text-sm text-gray-700 dark:text-slate-300">
+                <span className="text-xs text-gray-500 dark:text-slate-400">Enviar às</span>
+                <select
+                  value={scheduleDay}
+                  onChange={(e) => setScheduleDay(Number(e.target.value))}
+                  className="bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg px-2 py-1 text-sm"
+                >
+                  {WEEKDAY_LABELS.map((label, idx) => (
+                    <option key={label} value={idx}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  value={scheduleHour}
+                  onChange={(e) => setScheduleHour(Number(e.target.value))}
+                  className="bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 rounded-lg px-2 py-1 text-sm"
+                >
+                  {HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+                <button
+                  onClick={saveSchedule}
+                  disabled={savingSchedule}
+                  className="bg-navy-600 text-white rounded-lg px-3 py-1 text-xs font-semibold disabled:opacity-50"
+                >
+                  {savingSchedule ? 'A gravar…' : 'Gravar'}
+                </button>
+                {scheduleSaved && <span className="text-xs text-green-600 dark:text-emerald-400">Gravado.</span>}
+                {scheduleError && <span className="text-xs text-red-600 dark:text-rose-400">{scheduleError}</span>}
+                <span className="w-full text-xs text-gray-400 dark:text-slate-500">
+                  Hora local deste dispositivo (fuso: {Intl.DateTimeFormat().resolvedOptions().timeZone}).
+                </span>
+              </div>
+            )}
+
             <label className="flex items-center justify-between gap-3 text-sm">
               <span className="text-gray-700 dark:text-slate-300">
                 Alertas por email

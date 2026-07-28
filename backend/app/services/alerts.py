@@ -9,7 +9,7 @@ Alertas de preço são sempre verificados (o próprio target_buy_price/
 target_sell_price já é o opt-in). Alertas de sinal só correm para os itens
 com alert_on_signal=True - e só para esses é que agent.evaluate() é chamado
 neste job (os restantes continuam a ser avaliados só quando o utilizador o
-faz manualmente ou pelo weekly_job), para não gastar indicadores/Finnhub
+faz manualmente ou pelo report_job), para não gastar indicadores/Finnhub
 extra em quem não pediu este alerta."""
 import logging
 import uuid

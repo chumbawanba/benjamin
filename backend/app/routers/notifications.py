@@ -53,6 +53,8 @@ async def get_preferences(user: User = Depends(get_current_user)):
     return NotificationPreferencesOut(
         email_reports_enabled=user.email_reports_enabled,
         email_alerts_enabled=user.email_alerts_enabled,
+        report_day_of_week=user.report_day_of_week,
+        report_hour=user.report_hour,
     )
 
 
@@ -64,10 +66,14 @@ async def update_preferences(
 ):
     user.email_reports_enabled = body.email_reports_enabled
     user.email_alerts_enabled = body.email_alerts_enabled
+    user.report_day_of_week = body.report_day_of_week
+    user.report_hour = body.report_hour
     await db.commit()
     return NotificationPreferencesOut(
         email_reports_enabled=user.email_reports_enabled,
         email_alerts_enabled=user.email_alerts_enabled,
+        report_day_of_week=user.report_day_of_week,
+        report_hour=user.report_hour,
     )
 
 

@@ -222,6 +222,11 @@ export interface Notification {
 export interface NotificationPreferences {
   email_reports_enabled: boolean;
   email_alerts_enabled: boolean;
+  // Dia/hora (sempre UTC - ver CLAUDE.md) do resumo periódico.
+  // report_day_of_week segue datetime.weekday() (0=segunda ... 6=domingo).
+  // A UI mostra/recebe hora local do browser (ver utils/schedule.ts).
+  report_day_of_week: number;
+  report_hour: number;
 }
 
 export interface StrategySignal {
