@@ -1,11 +1,16 @@
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // ?expired=1 - ver api/client.ts: redireciona para aqui automaticamente
+  // quando o JWT expira/deixa de ser válido, em vez de deixar a página
+  // anterior presa a mostrar "Token inválido".
+  const sessionExpired = searchParams.get('expired') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +44,12 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 p-6 rounded-xl shadow-sm">
           <h1 className="text-2xl font-bold text-navy-600 dark:text-navy-400 mb-1">Benjamin</h1>
           <p className="text-sm text-gray-500 dark:text-slate-400 mb-6">Inicia sessão para continuar</p>
+
+          {sessionExpired && (
+            <p className="text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-300 rounded-lg px-3 py-2 mb-4">
+              A tua sessão expirou. Inicia sessão novamente.
+            </p>
+          )}
 
           <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1" htmlFor="email">
             Email

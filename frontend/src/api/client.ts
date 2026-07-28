@@ -35,9 +35,23 @@ export class ApiError extends Error {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Content-Type', 'application/json');
+  const hadToken = !!token;
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
   const resp = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  // Sessão expirada/inválida (JWT com expiração, ver CLAUDE.md e
+  // jwt_expires_hours no backend): em vez de deixar cada página mostrar o
+  // erro em bruto ("Token inválido"), limpa a sessão e volta ao login. Só
+  // quando já havia token - login/registo com credenciais erradas também
+  // devolvem 401 e devem continuar a mostrar o erro normalmente na própria
+  // página, sem redirecionar.
+  if (resp.status === 401 && hadToken) {
+    setToken(null);
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login?expired=1';
+    }
+  }
 
   if (resp.status === 204) {
     return undefined as T;
