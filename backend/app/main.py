@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import analyst, auth, evaluations, notifications, portfolio, strategies, waitlist, watchlist
+from app.routers import admin, analyst, auth, evaluations, notifications, portfolio, strategies, waitlist, watchlist
 from app.scheduler import alerts_job, daily_refresh_job, report_job
 
 
@@ -55,6 +55,7 @@ app.include_router(analyst.router, prefix=API)
 app.include_router(portfolio.router, prefix=API)
 app.include_router(waitlist.router, prefix=API)
 app.include_router(notifications.router, prefix=API)
+app.include_router(admin.router, prefix=API)
 
 
 @app.get("/health")

@@ -463,3 +463,9 @@ class NotificationPreferencesIn(BaseModel):
     email_alerts_enabled: bool
     report_day_of_week: int = Field(ge=0, le=6)
     report_hour: int = Field(ge=0, le=23)
+
+
+# ---- Admin (ver routers/admin.py, services/admin.py) ----
+class AdminStatsOut(BaseModel):
+    users_total: int
+    waitlist_total: int

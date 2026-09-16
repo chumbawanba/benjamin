@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_expires_hours: int = 24
     allow_registration: bool = False
+    # Chave partilhada para os endpoints /admin/* (ver security.py::require_admin).
+    # Vazia por omissao => os endpoints ficam sempre a devolver 401 (fail-closed).
+    admin_api_key: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

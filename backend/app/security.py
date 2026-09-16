@@ -1,9 +1,10 @@
+import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,3 +47,13 @@ async def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="Utilizador não encontrado")
     return user
+
+
+async def require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
+    """Protege os endpoints /admin/* (ver routers/admin.py) com uma chave
+    partilhada simples, em vez de um papel de admin no modelo User (que nao
+    existe - nao ha utilizadores admin na app, so este endpoint operacional).
+    Fail-closed: sem ADMIN_API_KEY configurada no .env, isto nunca autoriza,
+    mesmo que o pedido nao traga header nenhum."""
+    if not settings.admin_api_key or not x_admin_key or not hmac.compare_digest(x_admin_key, settings.admin_api_key):
+        raise HTTPException(status_code=401, detail="Não autorizado")
