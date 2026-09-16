@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    # Endereço que aparece no "De:" dos emails - separado de smtp_user porque
+    # em serviços como o Brevo o utilizador de autenticação SMTP não é
+    # necessariamente um endereço verificado no domínio (ex: pode ser o email
+    # de login da conta, não noreply@appbenjamin.com). Sem isto, o "De:"
+    # herdava sempre o smtp_user, o que falha ou fica com mau aspeto consoante
+    # o provedor. Vazio = mantém o comportamento antigo (usa smtp_user).
+    smtp_from_email: str = ""
     scheduler_enabled: bool = True
     # Usado para montar o link de cancelar subscrição nos emails (ver
     # app/services/email_service.py) - sem barra final.

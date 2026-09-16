@@ -273,6 +273,14 @@ class PositionUpdateIn(BaseModel):
     avg_cost: Decimal = Field(gt=0)
 
 
+class CashPositionIn(BaseModel):
+    # Código ISO 4217 de 3 letras (ex: EUR, USD) - normalizado para
+    # maiúsculas no router antes de chegar a get_or_create_cash_stock, mesmo
+    # padrão de PortfolioCurrencyIn.
+    currency: str = Field(min_length=3, max_length=3)
+    amount: Decimal = Field(gt=0)
+
+
 class PositionOut(BaseModel):
     id: uuid.UUID
     stock: StockOut

@@ -6,7 +6,7 @@ export interface Stock {
   name: string | null;
   currency: string | null;
   sector: string | null;
-  asset_type: 'stock' | 'etf';
+  asset_type: 'stock' | 'etf' | 'cash';
   exchange: string | null;
   last_quote_at: string | null;
 }

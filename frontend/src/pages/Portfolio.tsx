@@ -44,6 +44,11 @@ export default function Portfolio() {
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
+  const [cashCurrency, setCashCurrency] = useState('EUR');
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashAdding, setCashAdding] = useState(false);
+  const [cashError, setCashError] = useState<string | null>(null);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [editAvgCost, setEditAvgCost] = useState('');
@@ -151,11 +156,43 @@ export default function Portfolio() {
     }
   }
 
+  async function handleAddCash(e: FormEvent) {
+    e.preventDefault();
+    if (!cashAmount.trim()) return;
+    setCashAdding(true);
+    setCashError(null);
+    try {
+      await api.post('/portfolio/cash', { currency: cashCurrency, amount: cashAmount });
+      setCashAmount('');
+      await load();
+    } catch (err) {
+      setCashError(err instanceof ApiError ? err.message : 'Erro ao adicionar cash');
+    } finally {
+      setCashAdding(false);
+    }
+  }
+
   function startEdit(p: Position) {
     setEditingId(p.id);
     setEditQuantity(String(p.quantity));
     setEditAvgCost(String(p.avg_cost));
     setEditError(null);
+  }
+
+  // Cash não tem preço médio (é sempre 1, ver backend market_data.get_or_create_cash_stock)
+  // - guardar mantém sempre editAvgCost tal como veio, nunca exposto para editar.
+  async function saveEditCash(id: string) {
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await api.put(`/portfolio/${id}`, { quantity: editQuantity, avg_cost: '1' });
+      setEditingId(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err.message : 'Erro ao guardar');
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function saveEdit(id: string) {
@@ -298,6 +335,42 @@ export default function Portfolio() {
         {addError && <p className="text-xs text-red-600 dark:text-rose-400 mt-2">{addError}</p>}
       </form>
 
+      <form onSubmit={handleAddCash} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
+        <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Adicionar cash</p>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={cashCurrency}
+            onChange={(e) => setCashCurrency(e.target.value)}
+            className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm"
+          >
+            {currencyOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <input
+            value={cashAmount}
+            onChange={(e) => setCashAmount(e.target.value)}
+            placeholder="Montante"
+            inputMode="decimal"
+            className="flex-1 min-w-[100px] bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={cashAdding}
+            className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
+          >
+            {cashAdding ? '…' : 'Adicionar'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
+          Uma posição por moeda — se já tiveres cash em {cashCurrency}, edita o montante existente em vez de
+          adicionar outra vez.
+        </p>
+        {cashError && <p className="text-xs text-red-600 dark:text-rose-400 mt-2">{cashError}</p>}
+      </form>
+
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 
       {loading ? (
@@ -316,6 +389,7 @@ export default function Portfolio() {
             const plNum = toNum(p.unrealized_pl);
             const plPctNum = toNum(p.unrealized_pl_pct);
             const editing = editingId === p.id;
+            const isCash = p.stock.asset_type === 'cash';
             // Só mostra o "≈ convertido" quando a moeda da ação é diferente da
             // preferida - evita repetir o mesmo valor duas vezes sem necessidade.
             const needsConversion = p.stock.currency !== currency;
@@ -331,7 +405,9 @@ export default function Portfolio() {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      {wlItem ? (
+                      {isCash ? (
+                        <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.currency}</span>
+                      ) : wlItem ? (
                         <Link
                           to={`/stocks/${wlItem.id}`}
                           className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400"
@@ -341,14 +417,21 @@ export default function Portfolio() {
                       ) : (
                         <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.ticker}</span>
                       )}
+                      {isCash && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                          CASH
+                        </span>
+                      )}
                       {p.stock.asset_type === 'etf' && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
                           ETF
                         </span>
                       )}
-                      <span className="text-sm">
-                        <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
-                      </span>
+                      {!isCash && (
+                        <span className="text-sm">
+                          <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 dark:text-slate-400">{p.stock.name ?? '—'}</p>
                   </div>
@@ -362,7 +445,25 @@ export default function Portfolio() {
                   </div>
                 </div>
 
-                {editing ? (
+                {editing && isCash ? (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-slate-800 pt-2">
+                    <input
+                      value={editQuantity}
+                      onChange={(e) => setEditQuantity(e.target.value)}
+                      inputMode="decimal"
+                      className="w-28 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    <span className="text-xs text-gray-400 dark:text-slate-500">{p.stock.currency ?? ''}</span>
+                    <button
+                      onClick={() => saveEditCash(p.id)}
+                      disabled={editSaving}
+                      className="text-navy-600 dark:text-navy-400 text-xs font-medium disabled:opacity-50"
+                    >
+                      {editSaving ? 'A guardar…' : 'Guardar'}
+                    </button>
+                    {editError && <p className="text-xs text-red-600 dark:text-rose-400 w-full">{editError}</p>}
+                  </div>
+                ) : editing ? (
                   <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-slate-800 pt-2">
                     <input
                       value={editQuantity}
@@ -386,6 +487,16 @@ export default function Portfolio() {
                       {editSaving ? 'A guardar…' : 'Guardar'}
                     </button>
                     {editError && <p className="text-xs text-red-600 dark:text-rose-400 w-full">{editError}</p>}
+                  </div>
+                ) : isCash ? (
+                  <div className="border-t border-gray-100 dark:border-slate-800 pt-2 text-center">
+                    <p className="text-xs text-gray-400 dark:text-slate-500">Montante</p>
+                    <p className="text-sm text-gray-900 dark:text-slate-100">{money(quantityNum, p.stock.currency)}</p>
+                    {needsConversion && marketValueConvertedNum !== null && (
+                      <p className="text-xs text-gray-400 dark:text-slate-500">
+                        ≈ {money(marketValueConvertedNum, currency)}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 gap-2 text-center border-t border-gray-100 dark:border-slate-800 pt-2">

@@ -378,6 +378,33 @@ async def _backfill_profile(db: AsyncSession, stock: Stock) -> None:
     await db.flush()
 
 
+async def get_or_create_cash_stock(db: AsyncSession, currency: str) -> Stock:
+    """'Ação' sintética para representar uma posição de cash numa dada moeda
+    no portfolio (ver routers/portfolio.py::add_cash) - reutiliza a estrutura
+    Position/Stock já existente em vez de alterar o schema (CLAUDE.md: não
+    alterar o schema sem migration Alembic, e nada de abstrações para o
+    futuro além do que é preciso agora). Preço fixo em 1 (1 EUR vale sempre 1
+    EUR) via um único PriceSnapshot - sem isto get_price_change devolvia
+    sempre (None, None) e o portfolio mostrava "—" em vez do montante."""
+    ticker = f"CASH:{currency}"
+    stock = (await db.execute(select(Stock).where(Stock.ticker == ticker))).scalar_one_or_none()
+    if stock is None:
+        stock = Stock(ticker=ticker, name=f"Cash ({currency})", currency=currency, asset_type="cash")
+        db.add(stock)
+        await db.flush()
+
+    today = datetime.now(timezone.utc).date()
+    existing = (
+        await db.execute(
+            select(PriceSnapshot).where(PriceSnapshot.stock_id == stock.id, PriceSnapshot.date == today)
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(PriceSnapshot(stock_id=stock.id, date=today, close=Decimal("1")))
+
+    return stock
+
+
 async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     """Atualiza snapshots se o mais recente tiver mais de FRESHNESS_DAYS, OU se
     ainda não houver histórico suficiente (< MIN_HISTORY_ROWS). Com histórico
@@ -406,7 +433,14 @@ async def ensure_fresh(db: AsyncSession, stock: Stock) -> None:
     mais volta a percorrer, deixando P/E, ROE, margens, etc. congelados no
     valor da primeira vez que a ação foi adicionada. refresh_fundamentals tem
     o seu próprio cooldown interno (FUNDAMENTALS_RETRY_COOLDOWN), por isso
-    chamá-lo sempre aqui é seguro/barato."""
+    chamá-lo sempre aqui é seguro/barato.
+
+    Cash (ver get_or_create_cash_stock) nunca passa daqui: o preço é sempre 1,
+    gravado uma única vez na criação, e não há backfill/fundamentais que
+    façam sentido para uma posição de cash."""
+    if stock.asset_type == "cash":
+        return
+
     await _backfill_profile(db, stock)
     latest = (
         await db.execute(

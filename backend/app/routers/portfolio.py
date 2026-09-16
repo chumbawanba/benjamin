@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import FxRateSnapshot, Position, Stock, User
 from app.schemas.common import (
-    FxRateOut, PortfolioCurrencyIn, PortfolioCurrencyOut, PositionIn, PositionOut, PositionUpdateIn, StockOut,
+    CashPositionIn, FxRateOut, PortfolioCurrencyIn, PortfolioCurrencyOut, PositionIn, PositionOut, PositionUpdateIn,
+    StockOut,
 )
 from app.security import get_current_user
 from app.services import fx, market_data
@@ -165,6 +166,40 @@ async def create_position(
     ).scalar_one()
     target = user.preferred_currency
     rate = await fx.get_rate(db, stock.currency, target) if stock.currency else None
+    return await _to_dto(db, position, target, rate)
+
+
+@router.post("/cash", response_model=PositionOut, status_code=201)
+async def add_cash(
+    body: CashPositionIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """Adiciona uma posição de cash numa moeda (ver
+    market_data.get_or_create_cash_stock) - sem ticker nem preço de mercado
+    real, ao contrário de create_position acima. Uma posição por moeda por
+    utilizador, tal como para ações (mesma UniqueConstraint em Position);
+    para ajustar o montante depois, usa PUT /portfolio/{id} como qualquer
+    outra posição."""
+    currency = body.currency.upper().strip()
+    stock = await market_data.get_or_create_cash_stock(db, currency)
+    dup = (
+        await db.execute(select(Position).where(
+            Position.user_id == user.id, Position.stock_id == stock.id
+        ))
+    ).scalar_one_or_none()
+    if dup:
+        raise HTTPException(
+            status_code=422, detail=f"Já tens uma posição de cash em {currency} — edita a existente em vez de duplicar."
+        )
+    position = Position(user_id=user.id, stock_id=stock.id, quantity=body.amount, avg_cost=Decimal("1"))
+    db.add(position)
+    await db.commit()
+    position = (
+        await db.execute(
+            select(Position).options(selectinload(Position.stock)).where(Position.id == position.id)
+        )
+    ).scalar_one()
+    target = user.preferred_currency
+    rate = await fx.get_rate(db, currency, target) if currency != target else None
     return await _to_dto(db, position, target, rate)
 
 

@@ -23,7 +23,7 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
         return False
     msg = MIMEText(html_body, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = settings.smtp_user
+    msg["From"] = settings.smtp_from_email or settings.smtp_user
     msg["To"] = to_email
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
         server.starttls()
