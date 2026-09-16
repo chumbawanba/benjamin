@@ -1,10 +1,12 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AnalystChatProvider } from './context/AnalystChatContext';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { trackPageview } from './lib/analytics';
 import AdminStats from './pages/AdminStats';
 import FxRates from './pages/FxRates';
 import Login from './pages/Login';
@@ -16,12 +18,24 @@ import StockDetail from './pages/StockDetail';
 import StrategyEditor from './pages/StrategyEditor';
 import StrategyWorkspace from './pages/StrategyWorkspace';
 
+// Regista uma pageview no GA4 em cada mudança de rota, incluindo a
+// primeira - ver lib/analytics.ts (send_page_view vem desligado porque uma
+// SPA não recarrega a página em cada navegação).
+function AnalyticsTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    trackPageview(location.pathname + location.search);
+  }, [location]);
+  return null;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
         <AnalystChatProvider>
           <BrowserRouter>
+            <AnalyticsTracker />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
