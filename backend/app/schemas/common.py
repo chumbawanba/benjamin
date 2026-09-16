@@ -466,6 +466,22 @@ class NotificationPreferencesIn(BaseModel):
 
 
 # ---- Admin (ver routers/admin.py, services/admin.py) ----
+class AdminPersonOut(BaseModel):
+    email: str
+    created_at: datetime
+
+
+class AdminDailyRegistrationsOut(BaseModel):
+    date: str
+    users: int
+    waitlist: int
+
+
 class AdminStatsOut(BaseModel):
     users_total: int
     waitlist_total: int
+    users: list[AdminPersonOut]
+    waitlist: list[AdminPersonOut]
+    # Contagens por dia (não acumuladas - a soma ao longo do tempo é feita no
+    # frontend) para o gráfico de registos - ver AdminStats.tsx.
+    daily_registrations: list[AdminDailyRegistrationsOut]

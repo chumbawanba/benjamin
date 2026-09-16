@@ -338,7 +338,21 @@ export interface FxRate {
   date: string;
 }
 
+export interface AdminPerson {
+  email: string;
+  created_at: string;
+}
+
+export interface AdminDailyRegistrations {
+  date: string;
+  users: number;
+  waitlist: number;
+}
+
 export interface AdminStats {
   users_total: number;
   waitlist_total: number;
+  users: AdminPerson[];
+  waitlist: AdminPerson[];
+  daily_registrations: AdminDailyRegistrations[];
 }
