@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Só a página principal - as páginas legais (cookie/privacidade/risco) têm
+     meta robots noindex de propósito, por isso ficam fora do sitemap (o
+     Search Console assinala como erro um URL noindex submetido no sitemap). -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://appbenjamin.com/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
