@@ -9,15 +9,19 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _unsubscribe_footer(unsubscribe_token: str) -> str:
+def _unsubscribe_url(unsubscribe_token: str) -> str:
     # Link sem login (obrigatório em qualquer email periódico/tipo-alerta) -
     # ver app/routers/notifications.py::unsubscribe.
-    url = f"{settings.app_base_url}/unsubscribe/{unsubscribe_token}"
+    return f"{settings.app_base_url}/unsubscribe/{unsubscribe_token}"
+
+
+def _unsubscribe_footer(unsubscribe_token: str) -> str:
+    url = _unsubscribe_url(unsubscribe_token)
     return f'<p style="font-size:12px;color:#888">Não queres receber estes emails? ' \
            f'<a href="{url}">Cancelar subscrição</a>.</p>'
 
 
-def _send(to_email: str, subject: str, html_body: str) -> bool:
+def _send(to_email: str, subject: str, html_body: str, unsubscribe_token: str | None = None) -> bool:
     if not settings.smtp_host:
         logger.warning("SMTP não configurado — email '%s' não enviado para %s.", subject, to_email)
         return False
@@ -25,6 +29,14 @@ def _send(to_email: str, subject: str, html_body: str) -> bool:
     msg["Subject"] = subject
     msg["From"] = settings.smtp_from_email or settings.smtp_user
     msg["To"] = to_email
+    if unsubscribe_token:
+        # Header List-Unsubscribe (RFC 2369), além do link no corpo - é o que
+        # faz o Gmail/Yahoo mostrarem o botão nativo "Cancelar subscrição"
+        # junto ao remetente, em vez de a única opção visível ser "Reportar
+        # como spam" (o que destrói reputação de um domínio novo). Não inclui
+        # List-Unsubscribe-Post (one-click via POST, RFC 8058) porque o
+        # endpoint em notifications.py só aceita GET.
+        msg["List-Unsubscribe"] = f"<{_unsubscribe_url(unsubscribe_token)}>"
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
         server.starttls()
         server.login(settings.smtp_user, settings.smtp_password)
@@ -63,11 +75,11 @@ def send_summary(to_email: str, rows: list[dict], unsubscribe_token: str) -> boo
         logger.info("Resumo periódico: watchlist vazia, email não enviado para %s.", to_email)
         return False
     html = build_summary_html(rows) + _unsubscribe_footer(unsubscribe_token)
-    return _send(to_email, "Benjamin — Resumo da tua watchlist", html)
+    return _send(to_email, "Benjamin — Resumo da tua watchlist", html, unsubscribe_token)
 
 
 def send_notification_email(to_email: str, message: str, unsubscribe_token: str) -> bool:
     """Email de alerta (preço-alvo atingido ou mudança de sinal) - ver
     app/services/alerts.py e app/services/notifications.py."""
     html = f"<p>{message}</p>" + _unsubscribe_footer(unsubscribe_token)
-    return _send(to_email, "Benjamin — Alerta", html)
+    return _send(to_email, "Benjamin — Alerta", html, unsubscribe_token)
