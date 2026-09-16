@@ -84,3 +84,32 @@ export const api = {
     request<T>(path, { method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string): Promise<T> => request<T>(path, { method: 'DELETE' }),
 };
+
+// Chamada à parte para os endpoints /admin/* (ver backend/app/routers/admin.py):
+// autenticam com uma chave partilhada (header X-Admin-Key), não com o JWT da
+// sessão normal - por isso não passa por request() acima, que trata qualquer
+// 401 como sessão expirada e forçaria logout do utilizador atual só por
+// causa de uma chave de admin errada.
+export async function adminGet<T>(path: string, adminKey: string): Promise<T> {
+  const resp = await fetch(`${API_BASE}${path}`, {
+    headers: { 'X-Admin-Key': adminKey },
+  });
+
+  const text = await resp.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+
+  if (!resp.ok) {
+    const detail = (data as { detail?: unknown } | null)?.detail;
+    const message = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : resp.statusText;
+    throw new ApiError(resp.status, message || `Erro ${resp.status}`);
+  }
+
+  return data as T;
+}

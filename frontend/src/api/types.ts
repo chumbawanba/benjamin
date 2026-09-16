@@ -337,3 +337,8 @@ export interface FxRate {
   rate: number | string;
   date: string;
 }
+
+export interface AdminStats {
+  users_total: number;
+  waitlist_total: number;
+}

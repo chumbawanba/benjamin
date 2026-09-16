@@ -5,6 +5,7 @@ import { AnalystChatProvider } from './context/AnalystChatContext';
 import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
+import AdminStats from './pages/AdminStats';
 import FxRates from './pages/FxRates';
 import Login from './pages/Login';
 import Notifications from './pages/Notifications';
@@ -24,6 +25,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/admin" element={<AdminStats />} />
               <Route element={<ProtectedRoute />}>
                 <Route
                   element={
