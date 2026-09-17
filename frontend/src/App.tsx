@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import Notifications from './pages/Notifications';
 import Overview from './pages/Overview';
 import Portfolio from './pages/Portfolio';
+import ProjectionPage from './pages/Projection';
 import Register from './pages/Register';
 import StockDetail from './pages/StockDetail';
 import StrategyEditor from './pages/StrategyEditor';
@@ -54,6 +55,7 @@ export default function App() {
                   <Route path="/portfolio" element={<Portfolio />} />
                   <Route path="/portfolio/fx-rates" element={<FxRates />} />
                   <Route path="/loans" element={<Loans />} />
+                  <Route path="/projection" element={<ProjectionPage />} />
                   <Route path="/stocks/:id" element={<StockDetail />} />
                   <Route path="/strategies/:id" element={<StrategyEditor />} />
                   <Route path="/notifications" element={<Notifications />} />

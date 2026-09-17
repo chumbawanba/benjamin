@@ -352,6 +352,24 @@ class LoanOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ---- Projeção de património (ver services/projection.py) ----
+class ProjectionPointOut(BaseModel):
+    # year=0 é a situação atual (hoje), year=N é daqui a N anos.
+    year: int
+    portfolio_value: Decimal
+    loans_balance: Decimal
+    net_worth: Decimal
+
+
+class ProjectionOut(BaseModel):
+    currency: str
+    annual_return_pct: Decimal
+    years: int
+    starting_portfolio_value: Decimal
+    starting_loans_balance: Decimal
+    points: list[ProjectionPointOut]
+
+
 # ---- Strategies ----
 class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)

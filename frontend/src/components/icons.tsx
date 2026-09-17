@@ -74,3 +74,12 @@ export function IconBanknote({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+export function IconTrendingUp({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <polyline points="3,17 9,11 13,15 21,6" />
+      <polyline points="15,6 21,6 21,12" />
+    </svg>
+  );
+}

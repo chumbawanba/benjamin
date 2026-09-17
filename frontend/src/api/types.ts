@@ -343,6 +343,22 @@ export interface Loan {
   balance_converted: number | string | null;
 }
 
+export interface ProjectionPoint {
+  year: number;
+  portfolio_value: number | string;
+  loans_balance: number | string;
+  net_worth: number | string;
+}
+
+export interface Projection {
+  currency: string;
+  annual_return_pct: number | string;
+  years: number;
+  starting_portfolio_value: number | string;
+  starting_loans_balance: number | string;
+  points: ProjectionPoint[];
+}
+
 export interface FxRate {
   base_currency: string;
   quote_currency: string;

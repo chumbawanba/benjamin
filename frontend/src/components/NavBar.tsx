@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import ThemeToggle from './ThemeToggle';
-import { IconBanknote, IconBell, IconHome, IconLogout, IconSliders, IconWallet } from './icons';
+import { IconBanknote, IconBell, IconHome, IconLogout, IconSliders, IconTrendingUp, IconWallet } from './icons';
 
 function linkClass({ isActive }: { isActive: boolean }): string {
   return `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium ${
@@ -28,6 +28,10 @@ export default function NavBar() {
       <NavLink to="/loans" className={linkClass}>
         <IconBanknote />
         Empréstimos
+      </NavLink>
+      <NavLink to="/projection" className={linkClass}>
+        <IconTrendingUp />
+        Projeção
       </NavLink>
       <NavLink to="/workspace" className={linkClass}>
         <IconSliders />
