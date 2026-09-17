@@ -10,6 +10,12 @@ ano, sem separar juro/capital - ver CLAUDE.md, decisão tomada com o Edgar:
 prestação registada mantêm o saldo constante ao longo da projeção, porque não
 há como saber o plano de pagamento.
 
+Os "Outros Ativos" (imóveis, certificados, etc. - ver OtherAsset) entram
+também na projeção, mas cada um cresce à sua própria `expected_return_pct`
+em vez da taxa geral do portfolio de ações (pedido explícito do Edgar: "Cada
+ativo com a sua própria taxa"). Um ativo sem taxa definida mantém o valor
+constante ao longo da projeção.
+
 Não é um modelo actuarial: não simula inflação, não muda a taxa de câmbio ao
 longo do tempo (usa a taxa atual, fixa, para todos os anos) e não tem em conta
 novas entradas/saídas de capital - é uma extrapolação simples dos dados
@@ -21,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Loan, Position, User
+from app.models import Loan, OtherAsset, Position, User
 from app.schemas.common import ProjectionOut, ProjectionPointOut
 from app.services import fx, market_data
 
@@ -64,28 +70,55 @@ async def _current_loans(db: AsyncSession, user: User, target: str) -> list[tupl
     return result
 
 
+async def _current_other_assets(db: AsyncSession, user: User, target: str) -> list[tuple[Decimal, Decimal]]:
+    """Devolve uma lista de (valor_convertido, taxa_crescimento_anual) - um par
+    por ativo. Taxa = 0 quando `expected_return_pct` não está definida (o
+    valor desse ativo fica constante na projeção)."""
+    assets = (await db.execute(select(OtherAsset).where(OtherAsset.user_id == user.id))).scalars().all()
+    result: list[tuple[Decimal, Decimal]] = []
+    for asset in assets:
+        rate = await fx.get_rate(db, asset.currency, target)
+        if rate is None:
+            continue
+        value = asset.value * rate
+        growth = (asset.expected_return_pct / Decimal("100")) if asset.expected_return_pct else Decimal("0")
+        result.append((value, growth))
+    return result
+
+
 async def compute(db: AsyncSession, user: User, years: int, annual_return_pct: Decimal) -> ProjectionOut:
     target = user.preferred_currency
     portfolio_value = await _current_portfolio_value(db, user, target)
     loans = await _current_loans(db, user, target)
+    other_assets = await _current_other_assets(db, user, target)
     starting_loans_balance = sum((balance for balance, _ in loans), Decimal("0"))
+    starting_other_assets_value = sum((value for value, _ in other_assets), Decimal("0"))
 
     growth_factor = Decimal("1") + (annual_return_pct / Decimal("100"))
     balances = [balance for balance, _ in loans]
     payments = [payment for _, payment in loans]
+    # Cada outro ativo tem a sua própria taxa - guardamos os fatores de
+    # crescimento já calculados em vez do annual_return_pct do portfolio.
+    asset_values = [value for value, _ in other_assets]
+    asset_growth_factors = [Decimal("1") + rate for _, rate in other_assets]
 
     points: list[ProjectionPointOut] = []
     for year in range(years + 1):
         pv = portfolio_value * (growth_factor ** year)
+        other_total = sum(
+            (av * (gf ** year) for av, gf in zip(asset_values, asset_growth_factors)), Decimal("0")
+        )
         if year > 0:
             balances = [max(Decimal("0"), b - p) for b, p in zip(balances, payments)]
         loans_total = sum(balances, Decimal("0"))
         points.append(ProjectionPointOut(
-            year=year, portfolio_value=pv, loans_balance=loans_total, net_worth=pv - loans_total,
+            year=year, portfolio_value=pv, other_assets_value=other_total, loans_balance=loans_total,
+            net_worth=pv + other_total - loans_total,
         ))
 
     return ProjectionOut(
         currency=target, annual_return_pct=annual_return_pct, years=years,
-        starting_portfolio_value=portfolio_value, starting_loans_balance=starting_loans_balance,
+        starting_portfolio_value=portfolio_value, starting_other_assets_value=starting_other_assets_value,
+        starting_loans_balance=starting_loans_balance,
         points=points,
     )

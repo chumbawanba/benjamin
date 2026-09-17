@@ -343,9 +343,22 @@ export interface Loan {
   balance_converted: number | string | null;
 }
 
+export interface OtherAsset {
+  id: string;
+  category: 'imovel' | 'outro';
+  name: string;
+  currency: string;
+  value: number | string;
+  expected_return_pct: number | string | null;
+  updated_at: string;
+  display_currency: string;
+  value_converted: number | string | null;
+}
+
 export interface ProjectionPoint {
   year: number;
   portfolio_value: number | string;
+  other_assets_value: number | string;
   loans_balance: number | string;
   net_worth: number | string;
 }
@@ -355,6 +368,7 @@ export interface Projection {
   annual_return_pct: number | string;
   years: number;
   starting_portfolio_value: number | string;
+  starting_other_assets_value: number | string;
   starting_loans_balance: number | string;
   points: ProjectionPoint[];
 }

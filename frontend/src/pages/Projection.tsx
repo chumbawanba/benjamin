@@ -55,7 +55,8 @@ export default function ProjectionPage() {
       <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-1">Projeção de património</h1>
       <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">
         Extrapolação simples a partir dos dados de hoje: o portfolio cresce à rentabilidade que indicares
-        abaixo, e cada empréstimo desce pela sua prestação mensal x 12 por ano até chegar a zero. Não é
+        abaixo, cada outro ativo (imóveis, outros - ver separador Património) cresce à sua própria taxa
+        esperada, e cada empréstimo desce pela sua prestação mensal x 12 por ano até chegar a zero. Não é
         aconselhamento financeiro nem uma previsão - é só para teres uma ideia de tendência.
       </p>
 
@@ -91,11 +92,17 @@ export default function ProjectionPage() {
 
       {data && (
         <>
-          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-2 gap-2 text-center">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-3 gap-2 text-center">
             <div>
               <p className="text-xs text-gray-400 dark:text-slate-500">Portfolio hoje</p>
               <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
                 {money(toNum(data.starting_portfolio_value), data.currency)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 dark:text-slate-500">Outros ativos hoje</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-slate-100">
+                {money(toNum(data.starting_other_assets_value), data.currency)}
               </p>
             </div>
             <div>
@@ -119,6 +126,7 @@ export default function ProjectionPage() {
                 <tr className="text-xs text-gray-400 dark:text-slate-500 border-b border-gray-100 dark:border-slate-800">
                   <th className="text-left font-medium px-4 py-2">Ano</th>
                   <th className="text-right font-medium px-4 py-2">Portfolio</th>
+                  <th className="text-right font-medium px-4 py-2">Outros ativos</th>
                   <th className="text-right font-medium px-4 py-2">Dívida</th>
                   <th className="text-right font-medium px-4 py-2">Património líquido</th>
                 </tr>
@@ -132,6 +140,9 @@ export default function ProjectionPage() {
                       <td className="px-4 py-2 text-gray-500 dark:text-slate-400">{y === 0 ? 'Hoje' : `+${y}`}</td>
                       <td className="px-4 py-2 text-right text-gray-900 dark:text-slate-100">
                         {money(toNum(point.portfolio_value), data.currency)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-gray-900 dark:text-slate-100">
+                        {money(toNum(point.other_assets_value), data.currency)}
                       </td>
                       <td className="px-4 py-2 text-right text-gray-900 dark:text-slate-100">
                         {money(toNum(point.loans_balance), data.currency)}

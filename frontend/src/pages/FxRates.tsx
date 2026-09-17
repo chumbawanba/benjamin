@@ -34,8 +34,8 @@ export default function FxRates() {
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
-        <Link to="/portfolio" className="text-sm text-navy-600 dark:text-navy-400 font-medium">
-          ← Portfolio
+        <Link to="/patrimonio" className="text-sm text-navy-600 dark:text-navy-400 font-medium">
+          ← Património
         </Link>
       </div>
       <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-1">Taxas de câmbio</h1>

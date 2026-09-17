@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeIcon } from './ThemeToggle';
-import { IconBanknote, IconBell, IconHome, IconLogout, IconSliders, IconTrendingUp, IconWallet } from './icons';
+import { IconBell, IconHome, IconLogout, IconSliders, IconTrendingUp, IconWallet } from './icons';
 
 function linkClass({ isActive }: { isActive: boolean }): string {
   return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
@@ -33,13 +33,9 @@ export default function SideNav() {
           <IconHome />
           Overview
         </NavLink>
-        <NavLink to="/portfolio" className={linkClass}>
+        <NavLink to="/patrimonio" className={linkClass}>
           <IconWallet />
-          Portfolio
-        </NavLink>
-        <NavLink to="/loans" className={linkClass}>
-          <IconBanknote />
-          Empréstimos
+          Património
         </NavLink>
         <NavLink to="/projection" className={linkClass}>
           <IconTrendingUp />

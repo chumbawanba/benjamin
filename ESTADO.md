@@ -374,3 +374,53 @@ juro/capital), página nova e isolada, **sem** contribuições/levantamentos per
 devolve a série ano a ano; página `Projeção` com gráfico + tabela de marcos.
 Simplificações explícitas a manter em mente: taxa de câmbio fixa ao longo dos anos
 (não projeta variação cambial), sem inflação, sem novas entradas de capital.
+
+
+**Outros Ativos + página Património (imóveis, certificados, etc.) — feita nesta
+mesma sessão** (commits a seguir a `e52c369`, ver `git log`). Partiu de uma pergunta
+simples do Edgar - "não percebi onde coloco outros patrimonios como imoveis ou
+certificados de tesouro" - que expandiu para uma reestruturação maior depois de
+perguntar onde é que isto devia viver: o Edgar respondeu "estava a pensar ter um
+'património' em vez de portfolio e dentro vários separadores (portfolio acções,
+imoveis, cash, outros)", e confirmou de seguida que os Empréstimos deviam entrar
+como mais um separador em vez de ficarem na página própria.
+
+Backend: nova entidade `OtherAsset` (`category` em `imovel`/`outro`, `name`,
+`currency`, `value`, `expected_return_pct` opcional) - espelha o `Loan` do lado do
+ativo, mesmo padrão "só valor atual, sem histórico". CRUD completo em
+`/other-assets` (`app/routers/other_assets.py`), migration `53849ddfb8d8`. Decisões
+tomadas com o Edgar: campos "simples + taxa de rendimento esperada" (não um
+modelo de avaliações históricas), e **cada ativo entra na Projeção de património
+com a sua própria taxa** (`expected_return_pct`) em vez de herdar a rentabilidade
+geral do portfolio de ações - ver `app/services/projection.py::_current_other_assets`.
+Um ativo sem taxa definida fica com o valor constante ao longo da projeção, tal como
+já acontecia com empréstimos sem prestação. `ProjectionOut`/`ProjectionPointOut`
+ganharam `starting_other_assets_value`/`other_assets_value`; `net_worth` passou a
+ser `portfolio + outros_ativos - empréstimos`. 11 testes novos em
+`test_other_assets.py` e 2 em `test_projection.py` (crescimento à taxa própria, e
+ativo sem taxa fica constante) - suite completa continua verde (270 passed).
+
+Frontend: a antiga `Portfolio.tsx` (que já misturava ações e cash na mesma lista) e
+a `Loans.tsx` foram substituídas por `pages/Patrimonio.tsx`, uma página só com
+separadores (`?tab=` na URL, mesmo padrão do `StrategyWorkspace.tsx`): **Ações**,
+**Cash** (agora com formulário e lista próprios, antes viviam juntos), **Imóveis**,
+**Outros** e **Empréstimos**. Cada separador é um componente em
+`components/patrimonio/` (`AcoesTab`, `CashTab`, `OtherAssetsTab` - genérico,
+reutilizado por Imóveis e Outros - e `EmprestimosTab`); a página-mãe centraliza o
+carregamento de dados e o seletor de moeda preferida (é uma definição global do
+utilizador, afecta todos os separadores, não só Ações/Cash). Rota nova:
+`/patrimonio`; `/portfolio` e `/loans` ficam como redirects para não partir
+marcadores antigos. Navegação (`NavBar`/`SideNav`) passou a mostrar só
+"Património" (ícone `IconWallet`) em vez de "Portfolio" + "Empréstimos"
+separados. `PortfolioSummaryCard.tsx` (cartão na Overview) e a página `Projeção`
+passaram a incluir os Outros Ativos no património líquido/gráfico/tabela.
+
+Verificado com `pytest` (270 passed), `tsc -b` (sem erros) e um smoke test real
+(uvicorn + SQLite via `Base.metadata.create_all`, sem passar pelas migrations
+Alembic que são Postgres-specific e falham em SQLite - registar/login, criar
+empréstimo + 2 outros ativos, confirmar rejeição de categoria inválida, conferir
+os números da projeção à mão, editar e apagar um ativo) - tudo correcto. O
+`vite build`/`vite dev` continuam sem correr nesta VM de sandbox pelo mesmo motivo
+já registado acima (binário nativo do rollup em falta) - **[POR CONFIRMAR]** que o
+`npm run dev` real no PC do Edgar mostra a página Património correctamente (o
+`tsc -b` garante os tipos, não o resultado visual).

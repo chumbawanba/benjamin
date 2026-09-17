@@ -9,11 +9,10 @@ import { ThemeProvider } from './context/ThemeContext';
 import { trackPageview } from './lib/analytics';
 import AdminStats from './pages/AdminStats';
 import FxRates from './pages/FxRates';
-import Loans from './pages/Loans';
 import Login from './pages/Login';
 import Notifications from './pages/Notifications';
 import Overview from './pages/Overview';
-import Portfolio from './pages/Portfolio';
+import Patrimonio from './pages/Patrimonio';
 import ProjectionPage from './pages/Projection';
 import Register from './pages/Register';
 import StockDetail from './pages/StockDetail';
@@ -52,9 +51,13 @@ export default function App() {
                 >
                   <Route path="/" element={<Overview />} />
                   <Route path="/workspace" element={<StrategyWorkspace />} />
-                  <Route path="/portfolio" element={<Portfolio />} />
+                  <Route path="/patrimonio" element={<Patrimonio />} />
+                  {/* Rotas antigas (Portfolio/Loans separados, ver ESTADO.md secção 11) -
+                      redirecionam para os separadores correspondentes em Património, para
+                      não partir marcadores/links já guardados. */}
+                  <Route path="/portfolio" element={<Navigate to="/patrimonio" replace />} />
+                  <Route path="/loans" element={<Navigate to="/patrimonio?tab=emprestimos" replace />} />
                   <Route path="/portfolio/fx-rates" element={<FxRates />} />
-                  <Route path="/loans" element={<Loans />} />
                   <Route path="/projection" element={<ProjectionPage />} />
                   <Route path="/stocks/:id" element={<StockDetail />} />
                   <Route path="/strategies/:id" element={<StrategyEditor />} />

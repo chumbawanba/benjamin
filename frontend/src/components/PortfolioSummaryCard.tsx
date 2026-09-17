@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Loan, PortfolioCurrency, Position } from '../api/types';
+import { Loan, OtherAsset, PortfolioCurrency, Position } from '../api/types';
 import PortfolioAllocationChart from './PortfolioAllocationChart';
 
 function toNum(v: number | string | null | undefined): number | null {
@@ -22,15 +22,17 @@ function plColorClass(v: number | null): string {
   return 'text-gray-400 dark:text-slate-500';
 }
 
-// Resumo compacto do portfolio (custo/valor/P&L) e, quando há empréstimos
-// registados (ver Loans.tsx), do património líquido (valor do portfolio -
-// total em dívida) no topo do Overview, com link para a página Portfolio
-// para o detalhe por posição. Não aparece se o utilizador ainda não
-// registou nenhuma posição nem empréstimo — evita ruído para quem só usa a
+// Resumo compacto do portfolio de ações (custo/valor/P&L) e, quando há
+// empréstimos e/ou outros ativos registados (imóveis, certificados, etc. -
+// ver ESTADO.md secção 11), do património líquido (ações + cash + imóveis +
+// outros - total em dívida) no topo do Overview, com link para a página
+// Património para o detalhe por separador. Não aparece se o utilizador
+// ainda não registou nada — evita ruído para quem só usa a
 // watchlist/estratégias.
 export default function PortfolioSummaryCard() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [otherAssets, setOtherAssets] = useState<OtherAsset[]>([]);
   const [currency, setCurrency] = useState<string>('EUR');
   const [loading, setLoading] = useState(true);
 
@@ -39,17 +41,19 @@ export default function PortfolioSummaryCard() {
       api.get<Position[]>('/portfolio'),
       api.get<PortfolioCurrency>('/portfolio/currency'),
       api.get<Loan[]>('/loans').catch(() => []),
+      api.get<OtherAsset[]>('/other-assets').catch(() => []),
     ])
-      .then(([data, curr, loanData]) => {
+      .then(([data, curr, loanData, assetsData]) => {
         setPositions(data);
         setCurrency(curr.currency);
         setLoans(loanData);
+        setOtherAssets(assetsData);
       })
       .catch(() => setPositions([]))
       .finally(() => setLoading(false));
   }, []);
 
-  // Mesma lógica de conversão da página Portfolio (ver Portfolio.tsx) - usa o
+  // Mesma lógica de conversão da página Património (ver AcoesTab.tsx) - usa o
   // valor já convertido para a moeda preferida quando a ação está numa moeda
   // diferente, para não somar EUR com USD sem conversão.
   const totals = useMemo(() => {
@@ -86,13 +90,31 @@ export default function PortfolioSummaryCard() {
     return { total, hasUnknown };
   }, [loans, currency]);
 
-  const netWorth = totals.valueKnown - loansTotal.total;
+  // Valor dos outros ativos (imóveis, certificados, etc. - ver
+  // routers/other_assets.py), mesmo padrão de conversão.
+  const otherAssetsTotal = useMemo(() => {
+    let total = 0;
+    let hasUnknown = false;
+    for (const a of otherAssets) {
+      const converted = toNum(a.value_converted) ?? (a.currency === currency ? toNum(a.value) : null);
+      if (converted === null) {
+        hasUnknown = true;
+      } else {
+        total += converted;
+      }
+    }
+    return { total, hasUnknown };
+  }, [otherAssets, currency]);
 
-  if (loading || (positions.length === 0 && loans.length === 0)) return null;
+  const hasNetWorthExtras = loans.length > 0 || otherAssets.length > 0;
+  const netWorth = totals.valueKnown + otherAssetsTotal.total - loansTotal.total;
+  const netWorthHasUnknown = loansTotal.hasUnknown || otherAssetsTotal.hasUnknown;
+
+  if (loading || (positions.length === 0 && loans.length === 0 && otherAssets.length === 0)) return null;
 
   return (
     <Link
-      to="/portfolio"
+      to="/patrimonio"
       className="block bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4"
     >
       <div className="flex items-center justify-between mb-2">
@@ -102,11 +124,11 @@ export default function PortfolioSummaryCard() {
         <span className="text-xs text-navy-600 dark:text-navy-400">Ver detalhe →</span>
       </div>
 
-      {loans.length > 0 && (
+      {hasNetWorthExtras && (
         <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100 dark:border-slate-800">
           <span className="text-xs font-medium text-gray-500 dark:text-slate-400">
             Património líquido
-            {loansTotal.hasUnknown && '*'}
+            {netWorthHasUnknown && '*'}
           </span>
           <span className={`text-sm font-bold ${plColorClass(netWorth)}`}>{money(netWorth, currency)}</span>
         </div>
@@ -130,10 +152,12 @@ export default function PortfolioSummaryCard() {
         </div>
       </div>
 
-      {loans.length > 0 && (
+      {hasNetWorthExtras && (
         <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
-          Valor − {money(loansTotal.total, currency)} em dívida
-          {loansTotal.hasUnknown && ' (* exclui empréstimos sem câmbio conhecido ainda)'}
+          Valor
+          {otherAssets.length > 0 && ` + ${money(otherAssetsTotal.total, currency)} outros ativos`}
+          {loans.length > 0 && ` − ${money(loansTotal.total, currency)} em dívida`}
+          {netWorthHasUnknown && ' (* exclui valores sem câmbio conhecido ainda)'}
         </p>
       )}
 

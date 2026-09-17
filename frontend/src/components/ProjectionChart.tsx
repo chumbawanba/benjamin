@@ -11,9 +11,10 @@ function toNum(v: number | string): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-// Gráfico simples de 3 linhas (portfolio a crescer, dívida a descer,
-// património líquido) ao longo dos anos da projeção - mesmo estilo
-// hand-rolled SVG sem dependências do BacktestChart.tsx/Sparkline.tsx.
+// Gráfico simples de 4 linhas (portfolio a crescer, outros ativos a crescer
+// à sua própria taxa, dívida a descer, património líquido) ao longo dos anos
+// da projeção - mesmo estilo hand-rolled SVG sem dependências do
+// BacktestChart.tsx/Sparkline.tsx.
 export default function ProjectionChart({ points, width = 600, height = 200 }: Props) {
   if (points.length < 2) {
     return (
@@ -24,9 +25,10 @@ export default function ProjectionChart({ points, width = 600, height = 200 }: P
   }
 
   const portfolio = points.map((p) => toNum(p.portfolio_value));
+  const otherAssets = points.map((p) => toNum(p.other_assets_value));
   const loans = points.map((p) => toNum(p.loans_balance));
   const netWorth = points.map((p) => toNum(p.net_worth));
-  const all = [...portfolio, ...loans, ...netWorth];
+  const all = [...portfolio, ...otherAssets, ...loans, ...netWorth];
   const min = Math.min(0, ...all);
   const max = Math.max(...all, 1);
   const range = max - min || 1;
@@ -42,10 +44,11 @@ export default function ProjectionChart({ points, width = 600, height = 200 }: P
           <line x1={0} y1={y(0)} x2={width} y2={y(0)} strokeWidth={1} className="stroke-gray-200 dark:stroke-slate-700" />
         )}
         <polyline points={line(portfolio)} fill="none" strokeWidth={1.5} className="stroke-navy-400 dark:stroke-navy-500" strokeDasharray="4 3" />
+        <polyline points={line(otherAssets)} fill="none" strokeWidth={1.5} className="stroke-emerald-400 dark:stroke-emerald-500" strokeDasharray="4 3" />
         <polyline points={line(loans)} fill="none" strokeWidth={1.5} className="stroke-red-400 dark:stroke-rose-500" strokeDasharray="4 3" />
         <polyline points={line(netWorth)} fill="none" strokeWidth={2.5} className="stroke-navy-600 dark:stroke-navy-400" />
       </svg>
-      <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400 dark:text-slate-500">
+      <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-400 dark:text-slate-500">
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-0.5 bg-navy-600 dark:bg-navy-400" />
           Património líquido
@@ -53,6 +56,10 @@ export default function ProjectionChart({ points, width = 600, height = 200 }: P
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-0.5 bg-navy-400 dark:bg-navy-500" style={{ opacity: 0.7 }} />
           Portfolio
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-0.5 bg-emerald-400 dark:bg-emerald-500" style={{ opacity: 0.7 }} />
+          Outros ativos
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-0.5 bg-red-400 dark:bg-rose-500" style={{ opacity: 0.7 }} />

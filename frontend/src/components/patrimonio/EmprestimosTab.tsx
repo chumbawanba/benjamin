@@ -1,10 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { ApiError, api } from '../api/client';
-import { Loan } from '../api/types';
+import { FormEvent, useMemo, useState } from 'react';
+import { ApiError, api } from '../../api/client';
+import { Loan } from '../../api/types';
 
-// Moedas sempre disponíveis no seletor, mesmo padrão de Portfolio.tsx
-// (COMMON_CURRENCIES) - cobre o caso comum sem forçar o utilizador a já ter
-// um empréstimo nessa moeda.
 const COMMON_CURRENCIES = ['EUR', 'USD', 'GBP'];
 
 function toNum(v: number | string | null | undefined): number | null {
@@ -18,11 +15,16 @@ function money(v: number | null, currency?: string | null): string {
   return `${v.toFixed(2)} ${currency ?? ''}`.trim();
 }
 
-export default function Loans() {
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface Props {
+  loans: Loan[];
+  onReload: () => Promise<void>;
+}
 
+// Separador "Empréstimos" da página Património - antiga página Loans.tsx
+// (rota /loans própria), passada a separador quando o Edgar pediu para
+// agrupar tudo em Património (ver ESTADO.md secção 11: "Separador dentro de
+// Património (Recomendado)").
+export default function EmprestimosTab({ loans, onReload }: Props) {
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('EUR');
   const [balance, setBalance] = useState('');
@@ -39,21 +41,7 @@ export default function Loans() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const data = await api.get<Loan[]>('/loans');
-      setLoans(data);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao carregar empréstimos');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   const currencyOptions = useMemo(() => {
     const fromLoans = loans.map((l) => l.currency);
@@ -77,9 +65,6 @@ export default function Loans() {
       }
       const payment = toNum(l.monthly_payment);
       if (payment !== null) {
-        // Prestação não é convertida (é só informação de referência) - soma-se
-        // tal como está, por isso só faz sentido quando todos os empréstimos
-        // estão na mesma moeda que a preferida (aviso abaixo cobre o resto).
         monthlyTotal += payment;
       }
     }
@@ -103,7 +88,7 @@ export default function Loans() {
       setBalance('');
       setInterestRate('');
       setMonthlyPayment('');
-      await load();
+      await onReload();
     } catch (err) {
       setAddError(err instanceof ApiError ? err.message : 'Erro ao adicionar empréstimo');
     } finally {
@@ -131,7 +116,7 @@ export default function Loans() {
         monthly_payment: editMonthlyPayment.trim() || null,
       });
       setEditingId(null);
-      await load();
+      await onReload();
     } catch (err) {
       setEditError(err instanceof ApiError ? err.message : 'Erro ao guardar');
     } finally {
@@ -143,7 +128,7 @@ export default function Loans() {
     if (!confirm('Remover este empréstimo?')) return;
     try {
       await api.delete(`/loans/${id}`);
-      await load();
+      await onReload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao remover');
     }
@@ -151,8 +136,6 @@ export default function Loans() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-4">Empréstimos</h1>
-
       {totals.hasAny && (
         <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-2 gap-2 text-center">
           <div>
@@ -236,9 +219,7 @@ export default function Loans() {
 
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 
-      {loading ? (
-        <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>
-      ) : loans.length === 0 ? (
+      {loans.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-slate-400">
           Ainda não tens empréstimos registados. Adiciona um acima para acompanhares o teu património líquido.
         </p>

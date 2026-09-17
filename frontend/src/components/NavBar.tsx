@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import ThemeToggle from './ThemeToggle';
-import { IconBanknote, IconBell, IconHome, IconLogout, IconSliders, IconTrendingUp, IconWallet } from './icons';
+import { IconBell, IconHome, IconLogout, IconSliders, IconTrendingUp, IconWallet } from './icons';
 
 function linkClass({ isActive }: { isActive: boolean }): string {
   return `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium ${
@@ -21,13 +21,9 @@ export default function NavBar() {
         <IconHome />
         Overview
       </NavLink>
-      <NavLink to="/portfolio" className={linkClass}>
+      <NavLink to="/patrimonio" className={linkClass}>
         <IconWallet />
-        Portfolio
-      </NavLink>
-      <NavLink to="/loans" className={linkClass}>
-        <IconBanknote />
-        Empréstimos
+        Património
       </NavLink>
       <NavLink to="/projection" className={linkClass}>
         <IconTrendingUp />

@@ -357,6 +357,7 @@ class ProjectionPointOut(BaseModel):
     # year=0 é a situação atual (hoje), year=N é daqui a N anos.
     year: int
     portfolio_value: Decimal
+    other_assets_value: Decimal
     loans_balance: Decimal
     net_worth: Decimal
 
@@ -366,8 +367,45 @@ class ProjectionOut(BaseModel):
     annual_return_pct: Decimal
     years: int
     starting_portfolio_value: Decimal
+    starting_other_assets_value: Decimal
     starting_loans_balance: Decimal
     points: list[ProjectionPointOut]
+
+
+# ---- Outros ativos (imóveis, certificados, etc. - fora do Portfolio/Loans) ----
+VALID_OTHER_ASSET_CATEGORIES = {"imovel", "outro"}
+
+
+class OtherAssetIn(BaseModel):
+    category: str
+    name: str = Field(min_length=1, max_length=255)
+    currency: str = Field(min_length=3, max_length=3)
+    value: Decimal = Field(ge=0)
+    expected_return_pct: Decimal | None = None
+
+
+class OtherAssetUpdateIn(BaseModel):
+    # Sem `category`/`currency` - imutáveis depois de criado, mesmo padrão de
+    # LoanUpdateIn não incluir `currency`.
+    name: str = Field(min_length=1, max_length=255)
+    value: Decimal = Field(ge=0)
+    expected_return_pct: Decimal | None = None
+
+
+class OtherAssetOut(BaseModel):
+    id: uuid.UUID
+    category: str
+    name: str
+    currency: str
+    value: Decimal
+    expected_return_pct: Decimal | None
+    updated_at: datetime
+    # Mesmo padrão de LoanOut/PositionOut - valor convertido para
+    # User.preferred_currency, None se a taxa não estiver disponível.
+    display_currency: str
+    value_converted: Decimal | None
+
+    model_config = {"from_attributes": True}
 
 
 # ---- Strategies ----

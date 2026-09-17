@@ -1,15 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, api } from '../api/client';
-import { PortfolioCurrency, Position, WatchlistItem } from '../api/types';
-import PortfolioAllocationChart from '../components/PortfolioAllocationChart';
-import PriceChange from '../components/PriceChange';
-
-// Moedas sempre disponíveis no seletor, mesmo sem nenhuma posição ainda nelas -
-// cobre o caso comum (EUR/USD) sem forçar o utilizador a já ter uma posição
-// nessa moeda. Outras moedas presentes nas posições (ex: GBP) são adicionadas
-// dinamicamente em `currencyOptions`.
-const COMMON_CURRENCIES = ['EUR', 'USD', 'GBP'];
+import { ApiError, api } from '../../api/client';
+import { Position, WatchlistItem } from '../../api/types';
+import PortfolioAllocationChart from '../PortfolioAllocationChart';
+import PriceChange from '../PriceChange';
 
 function toNum(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -29,25 +23,23 @@ function plColorClass(v: number | null): string {
   return 'text-gray-400 dark:text-slate-500';
 }
 
-export default function Portfolio() {
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+interface Props {
+  positions: Position[];
+  watchlist: WatchlistItem[];
+  currency: string;
+  onReload: () => Promise<void>;
+}
 
-  const [currency, setCurrency] = useState<string>('EUR');
-  const [currencySaving, setCurrencySaving] = useState(false);
-
+// Separador "Ações" da página Património - só posições de ações/ETFs (o cash
+// vive no separador "Cash", ver CashTab.tsx). Extraído da antiga Portfolio.tsx
+// (ver ESTADO.md secção 11) quando o Edgar pediu para agrupar portfolio,
+// imóveis, cash, outros e empréstimos num só sítio com separadores.
+export default function AcoesTab({ positions, watchlist, currency, onReload }: Props) {
   const [ticker, setTicker] = useState('');
   const [quantity, setQuantity] = useState('');
   const [avgCost, setAvgCost] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-
-  const [cashCurrency, setCashCurrency] = useState('EUR');
-  const [cashAmount, setCashAmount] = useState('');
-  const [cashAdding, setCashAdding] = useState(false);
-  const [cashError, setCashError] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
@@ -55,45 +47,7 @@ export default function Portfolio() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const [data, curr, wl] = await Promise.all([
-        api.get<Position[]>('/portfolio'),
-        api.get<PortfolioCurrency>('/portfolio/currency'),
-        api.get<WatchlistItem[]>('/watchlist'),
-      ]);
-      setPositions(data);
-      setCurrency(curr.currency);
-      setWatchlist(wl);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao carregar portfolio');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function handleCurrencyChange(next: string) {
-    setCurrencySaving(true);
-    try {
-      await api.put<PortfolioCurrency>('/portfolio/currency', { currency: next });
-      setCurrency(next);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao mudar de moeda');
-    } finally {
-      setCurrencySaving(false);
-    }
-  }
-
-  const currencyOptions = useMemo(() => {
-    const fromPositions = positions.map((p) => p.stock.currency).filter((c): c is string => !!c);
-    return Array.from(new Set([...COMMON_CURRENCIES, ...fromPositions, currency]));
-  }, [positions, currency]);
+  const [error, setError] = useState<string | null>(null);
 
   // Para o link "ver detalhe" de cada posição — a página StockDetail é
   // indexada por watchlist_item_id, não por stock_id, por isso só há link
@@ -119,9 +73,6 @@ export default function Portfolio() {
     let valueKnown = 0;
     let costOfKnown = 0;
     for (const p of positions) {
-      // Usa o valor convertido quando disponível (posições em moedas diferentes
-      // da preferida) - cai para o valor nativo só quando a moeda já coincide
-      // (cost_total_converted vem null nesse caso, ver routers/portfolio.py).
       const cost = toNum(p.cost_total_converted) ?? toNum(p.cost_total) ?? 0;
       costTotal += cost;
       const mv = toNum(p.market_value_converted) ?? toNum(p.market_value);
@@ -148,27 +99,11 @@ export default function Portfolio() {
       setTicker('');
       setQuantity('');
       setAvgCost('');
-      await load();
+      await onReload();
     } catch (err) {
       setAddError(err instanceof ApiError ? err.message : 'Erro ao adicionar posição');
     } finally {
       setAdding(false);
-    }
-  }
-
-  async function handleAddCash(e: FormEvent) {
-    e.preventDefault();
-    if (!cashAmount.trim()) return;
-    setCashAdding(true);
-    setCashError(null);
-    try {
-      await api.post('/portfolio/cash', { currency: cashCurrency, amount: cashAmount });
-      setCashAmount('');
-      await load();
-    } catch (err) {
-      setCashError(err instanceof ApiError ? err.message : 'Erro ao adicionar cash');
-    } finally {
-      setCashAdding(false);
     }
   }
 
@@ -179,29 +114,13 @@ export default function Portfolio() {
     setEditError(null);
   }
 
-  // Cash não tem preço médio (é sempre 1, ver backend market_data.get_or_create_cash_stock)
-  // - guardar mantém sempre editAvgCost tal como veio, nunca exposto para editar.
-  async function saveEditCash(id: string) {
-    setEditSaving(true);
-    setEditError(null);
-    try {
-      await api.put(`/portfolio/${id}`, { quantity: editQuantity, avg_cost: '1' });
-      setEditingId(null);
-      await load();
-    } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : 'Erro ao guardar');
-    } finally {
-      setEditSaving(false);
-    }
-  }
-
   async function saveEdit(id: string) {
     setEditSaving(true);
     setEditError(null);
     try {
       await api.put(`/portfolio/${id}`, { quantity: editQuantity, avg_cost: editAvgCost });
       setEditingId(null);
-      await load();
+      await onReload();
     } catch (err) {
       setEditError(err instanceof ApiError ? err.message : 'Erro ao guardar');
     } finally {
@@ -213,7 +132,7 @@ export default function Portfolio() {
     if (!confirm('Remover esta posição do portfolio?')) return;
     try {
       await api.delete(`/portfolio/${id}`);
-      await load();
+      await onReload();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao remover');
     }
@@ -221,29 +140,6 @@ export default function Portfolio() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100">Portfolio</h1>
-        <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
-          Moeda
-          <select
-            value={currency}
-            disabled={currencySaving}
-            onChange={(e) => void handleCurrencyChange(e.target.value)}
-            className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1 text-xs disabled:opacity-50"
-          >
-            {currencyOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <Link to="/portfolio/fx-rates" className="inline-block text-xs text-navy-600 dark:text-navy-400 font-medium mb-4">
-        Ver taxas de câmbio →
-      </Link>
-
       {totals.hasAny && (
         <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-3 gap-2 text-center">
           <div>
@@ -335,49 +231,11 @@ export default function Portfolio() {
         {addError && <p className="text-xs text-red-600 dark:text-rose-400 mt-2">{addError}</p>}
       </form>
 
-      <form onSubmit={handleAddCash} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4">
-        <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">Adicionar cash</p>
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={cashCurrency}
-            onChange={(e) => setCashCurrency(e.target.value)}
-            className="bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm"
-          >
-            {currencyOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <input
-            value={cashAmount}
-            onChange={(e) => setCashAmount(e.target.value)}
-            placeholder="Montante"
-            inputMode="decimal"
-            className="flex-1 min-w-[100px] bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={cashAdding}
-            className="bg-navy-600 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 shrink-0"
-          >
-            {cashAdding ? '…' : 'Adicionar'}
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
-          Uma posição por moeda — se já tiveres cash em {cashCurrency}, edita o montante existente em vez de
-          adicionar outra vez.
-        </p>
-        {cashError && <p className="text-xs text-red-600 dark:text-rose-400 mt-2">{cashError}</p>}
-      </form>
-
       {error && <p className="text-sm text-red-600 dark:text-rose-400 mb-4">{error}</p>}
 
-      {loading ? (
-        <p className="text-sm text-gray-500 dark:text-slate-400">A carregar…</p>
-      ) : positions.length === 0 ? (
+      {positions.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-slate-400">
-          Ainda não tens posições registadas. Adiciona uma acima para começares a acompanhar o P&L real.
+          Ainda não tens posições de ações registadas. Adiciona uma acima para começares a acompanhar o P&L real.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -389,9 +247,6 @@ export default function Portfolio() {
             const plNum = toNum(p.unrealized_pl);
             const plPctNum = toNum(p.unrealized_pl_pct);
             const editing = editingId === p.id;
-            const isCash = p.stock.asset_type === 'cash';
-            // Só mostra o "≈ convertido" quando a moeda da ação é diferente da
-            // preferida - evita repetir o mesmo valor duas vezes sem necessidade.
             const needsConversion = p.stock.currency !== currency;
             const marketValueConvertedNum = toNum(p.market_value_converted);
             const plConvertedNum = toNum(p.unrealized_pl_converted);
@@ -405,9 +260,7 @@ export default function Portfolio() {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      {isCash ? (
-                        <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.currency}</span>
-                      ) : wlItem ? (
+                      {wlItem ? (
                         <Link
                           to={`/stocks/${wlItem.id}`}
                           className="font-semibold text-gray-900 dark:text-slate-100 hover:text-navy-600 dark:hover:text-navy-400"
@@ -417,21 +270,14 @@ export default function Portfolio() {
                       ) : (
                         <span className="font-semibold text-gray-900 dark:text-slate-100">{p.stock.ticker}</span>
                       )}
-                      {isCash && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-                          CASH
-                        </span>
-                      )}
                       {p.stock.asset_type === 'etf' && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-navy-50 text-navy-700 dark:bg-navy-500/15 dark:text-navy-400">
                           ETF
                         </span>
                       )}
-                      {!isCash && (
-                        <span className="text-sm">
-                          <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
-                        </span>
-                      )}
+                      <span className="text-sm">
+                        <PriceChange price={p.last_price} changePct={p.price_change_pct} currency={p.stock.currency} />
+                      </span>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-slate-400">{p.stock.name ?? '—'}</p>
                   </div>
@@ -445,25 +291,7 @@ export default function Portfolio() {
                   </div>
                 </div>
 
-                {editing && isCash ? (
-                  <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-slate-800 pt-2">
-                    <input
-                      value={editQuantity}
-                      onChange={(e) => setEditQuantity(e.target.value)}
-                      inputMode="decimal"
-                      className="w-28 bg-gray-50 dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm"
-                    />
-                    <span className="text-xs text-gray-400 dark:text-slate-500">{p.stock.currency ?? ''}</span>
-                    <button
-                      onClick={() => saveEditCash(p.id)}
-                      disabled={editSaving}
-                      className="text-navy-600 dark:text-navy-400 text-xs font-medium disabled:opacity-50"
-                    >
-                      {editSaving ? 'A guardar…' : 'Guardar'}
-                    </button>
-                    {editError && <p className="text-xs text-red-600 dark:text-rose-400 w-full">{editError}</p>}
-                  </div>
-                ) : editing ? (
+                {editing ? (
                   <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-slate-800 pt-2">
                     <input
                       value={editQuantity}
@@ -487,16 +315,6 @@ export default function Portfolio() {
                       {editSaving ? 'A guardar…' : 'Guardar'}
                     </button>
                     {editError && <p className="text-xs text-red-600 dark:text-rose-400 w-full">{editError}</p>}
-                  </div>
-                ) : isCash ? (
-                  <div className="border-t border-gray-100 dark:border-slate-800 pt-2 text-center">
-                    <p className="text-xs text-gray-400 dark:text-slate-500">Montante</p>
-                    <p className="text-sm text-gray-900 dark:text-slate-100">{money(quantityNum, p.stock.currency)}</p>
-                    {needsConversion && marketValueConvertedNum !== null && (
-                      <p className="text-xs text-gray-400 dark:text-slate-500">
-                        ≈ {money(marketValueConvertedNum, currency)}
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 gap-2 text-center border-t border-gray-100 dark:border-slate-800 pt-2">

@@ -83,3 +83,29 @@ export function IconTrendingUp({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+
+export function IconBuilding({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <rect x="4" y="3" width="11" height="18" rx="1" />
+      <path d="M15 8h5v13h-5" />
+      <line x1="7" y1="7" x2="7" y2="7.01" />
+      <line x1="11" y1="7" x2="11" y2="7.01" />
+      <line x1="7" y1="11" x2="7" y2="11.01" />
+      <line x1="11" y1="11" x2="11" y2="11.01" />
+      <line x1="7" y1="15" x2="7" y2="15.01" />
+      <line x1="11" y1="15" x2="11" y2="15.01" />
+    </svg>
+  );
+}
+
+export function IconLayers({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <polygon points="12,3 21,8 12,13 3,8" />
+      <polyline points="3,13 12,18 21,13" />
+      <polyline points="3,17.5 12,22.5 21,17.5" />
+    </svg>
+  );
+}
