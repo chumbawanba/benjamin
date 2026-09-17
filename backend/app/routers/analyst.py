@@ -63,7 +63,7 @@ async def get_prompt(user: User = Depends(get_current_user)):
     """Devolve o prompt de sistema atualmente em uso (personalizado, se
     existir, senão a predefinição) — para pré-preencher o editor no frontend."""
     is_default = not (user.analyst_prompt and user.analyst_prompt.strip())
-    return AnalystPromptOut(prompt=analyst.effective_prompt(user), is_default=is_default)
+    return AnalystPromptOut(prompt=analyst.stored_prompt(user), is_default=is_default)
 
 
 @router.put("/prompt", response_model=AnalystPromptOut)
@@ -78,7 +78,7 @@ async def update_prompt(
     user.analyst_prompt = body.prompt.strip() if body.prompt and body.prompt.strip() else None
     await db.commit()
     is_default = user.analyst_prompt is None
-    return AnalystPromptOut(prompt=analyst.effective_prompt(user), is_default=is_default)
+    return AnalystPromptOut(prompt=analyst.stored_prompt(user), is_default=is_default)
 
 
 @router.post("/summary/refresh", response_model=AnalystSummaryOut)

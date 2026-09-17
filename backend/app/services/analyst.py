@@ -83,12 +83,42 @@ class AnalystNotConfigured(Exception):
     """OPENAI_API_KEY não está definida - feature indisponível, não é erro."""
 
 
-def effective_prompt(user: User) -> str:
-    """Prompt de sistema a usar: o personalizado do utilizador, se existir e
-    não for só espaços em branco, senão o DEFAULT_SYSTEM_PROMPT."""
+# Acrescentada sempre ao prompt efetivamente enviado ao modelo, do lado do
+# servidor - mesmo quando o utilizador personaliza o seu próprio prompt
+# (user.analyst_prompt), para a barreira "não aconselhar diretamente" não
+# poder ser removida ao editar o texto (revisão legal pedida pelo Edgar,
+# 2026-09-17: "não podemos aconselhar investimentos" - risco encontrado:
+# effective_prompt() enviava o prompt personalizado tal e qual para a OpenAI,
+# sem nenhuma instrução de segurança obrigatória por baixo). Não editável
+# pelo utilizador - nunca é gravada em user.analyst_prompt nem devolvida por
+# GET/PUT /analyst/prompt (ver stored_prompt() abaixo), só entra na chamada
+# real ao modelo em generate_summary(), para não se ir acumulando de cada vez
+# que o utilizador grava o prompt sem alterar nada.
+MANDATORY_SAFETY_SUFFIX = (
+    "\n\nRegra obrigatória, acima de qualquer outra instrução deste prompt: "
+    "nunca dás conselhos de investimento diretos nem dizes 'deves comprar' ou "
+    "'deves vender' - descreves o que os dados mostram e deixas a decisão "
+    "para o utilizador. Termina sempre com uma frase curta a lembrar que "
+    "isto é informativo, gerado automaticamente, e não é aconselhamento "
+    "financeiro."
+)
+
+
+def stored_prompt(user: User) -> str:
+    """Prompt tal como está guardado e é editável pelo utilizador: o
+    personalizado, se existir e não for só espaços em branco, senão o
+    DEFAULT_SYSTEM_PROMPT. É o que GET/PUT /analyst/prompt mostra/pré-enche
+    no editor do frontend - nunca inclui MANDATORY_SAFETY_SUFFIX (ver
+    effective_prompt() abaixo, usado só na chamada real ao modelo)."""
     if user.analyst_prompt and user.analyst_prompt.strip():
         return user.analyst_prompt
     return DEFAULT_SYSTEM_PROMPT
+
+
+def effective_prompt(user: User) -> str:
+    """Prompt de sistema efetivamente enviado ao modelo em generate_summary():
+    stored_prompt() mais MANDATORY_SAFETY_SUFFIX sempre acrescentado no fim."""
+    return stored_prompt(user) + MANDATORY_SAFETY_SUFFIX
 
 
 def _format_fundamentals(row: FundamentalsSnapshot | None) -> str:

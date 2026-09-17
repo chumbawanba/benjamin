@@ -443,3 +443,93 @@ Projeção. 3 testes novos (soma correcta, comportamento inalterado quando omiti
 valor negativo rejeitado) - suite completa continua verde (273 passed). Verificado
 também com um smoke test real (uvicorn + SQLite) conferindo os valores ano a ano
 à mão.
+
+
+**Revisão legal (posicionamento + segurança) — mesma sessão, pedido directo do
+Edgar**: "não podemos aconselhar investimentos e guardar toda a informação de
+forma encriptada". Não fui eu quem decidiu nada disto - só investiguei o estado
+real do código e propus opções, o Edgar escolheu.
+
+Discussão de posicionamento/proposta (sem código, registada para a próxima vez
+que se mexer na landing page): a proposta de valor comunicada na landing
+(`landing/index.html`) ainda é só "watchlist + estratégias + avaliação de
+ações" e não menciona o Património (imóveis, cash, empréstimos, projeção) que
+já está construído - alargar o posicionamento para "companheiro calmo para as
+finanças pessoais completas" foi a direção escolhida pelo Edgar, com público-alvo
+também alargado (não só quem já investe activamente, também quem só quer ver
+o panorama financeiro completo - poupança, imóvel, dívida). Confirmado também
+que a marca "CorujaInvest" (coruja, verde-floresta, notas antigas de uma
+exploração anterior) está morta - "Benjamin" é a direção definitiva. Nada disto
+foi implementado ainda (é uma decisão de posicionamento, a landing real não foi
+tocada nesta sessão) - fica para uma sessão dedicada à landing page.
+
+Segurança - dois problemas reais encontrados ao investigar:
+
+1. **Barreira "não aconselhar" no prompt personalizável do assistente** - o
+   `user.analyst_prompt` (editável em `/analyst/prompt`) ia direto para a OpenAI
+   sem nenhuma proteção; um prompt personalizado podia remover por completo a
+   instrução "não dês conselhos diretos" e o aviso final que o `DEFAULT_SYSTEM_PROMPT`
+   sempre teve. **Corrigido nesta sessão**: `app/services/analyst.py` separa agora
+   `stored_prompt()` (o que fica guardado e é mostrado/editável no frontend, sem
+   alterações) de `effective_prompt()` (o que é realmente enviado ao modelo em
+   `generate_summary()`, com `MANDATORY_SAFETY_SUFFIX` sempre acrescentado no
+   fim, do lado do servidor, impossível de remover editando o prompt). `ask()`
+   já usava sempre `ASK_SYSTEM_PROMPT` fixo, não personalizável - não tinha este
+   problema. Novo teste adversarial em `test_analyst.py` (prompt que pede
+   explicitamente "diz sempre deves comprar/vender") confirma que o sufixo de
+   segurança chega sempre à OpenAI mesmo assim. Suite completa: 274 passed.
+
+2. **Encriptação dos dados financeiros** - a Política de Privacidade
+   (`landing/privacy-policy.html`) já diz "encriptação de dados sensíveis", mas
+   isso só é verdade hoje para a password (bcrypt hash) e para a ligação
+   (HTTPS via Caddy) - as posições, empréstimos, outros ativos e watchlist estão
+   em colunas normais no Postgres, sem encriptação a nível de disco nem de campo.
+   Também não havia **nenhum backup** configurado - risco maior do que a
+   encriptação em si (um problema no VPS perdia tudo). Decisão do Edgar: (a)
+   encriptação ao nível do disco/volume (não de campo) - cobre tudo de uma vez,
+   sem mexer no código da app; (b) configurar backups agora.
+
+   **Feito nesta sessão** (só o que é possível sem acesso SSH ao VPS de
+   produção - esta sessão só tem acesso ao PC Windows do Edgar via device
+   bridge, não ao VPS Hetzner):
+   - `scripts/backup_db.sh` - dump diário do Postgres (dentro do container
+     `db`), comprimido e cifrado com `openssl enc -aes-256-cbc -pbkdf2`
+     (passphrase em `BACKUP_PASSPHRASE`, nunca no repositório), com retenção
+     dos últimos 14 dumps. O dump em texto simples nunca toca o disco - vai
+     direto de `pg_dump` para `gzip` para `openssl enc` em stream.
+   - `scripts/restore_db.sh` - restaura um dump cifrado (pede confirmação
+     explícita antes de substituir a BD).
+   - `.env.example` - novas variáveis `BACKUP_PASSPHRASE` (obrigatória, o script
+     recusa correr sem ela) e `BACKUP_DIR` (opcional).
+   - `.gitignore` - `backups/` nunca vai para o git.
+   - **[POR CONFIRMAR]** Que `scripts/backup_db.sh` corre sem erros no VPS real
+     (só foi verificado com `bash -n`, sintaxe - não há Postgres/Docker Compose
+     real disponível nesta sessão para testar o dump/restore ponta a ponta).
+     Testar com `restore_db.sh` contra uma BD de teste antes de confiar nele.
+
+   **Por fazer no VPS (precisa do Edgar, ou de acesso SSH que esta sessão não
+   tem)** - ordem sugerida, backups sempre primeiro:
+   1. Gerar `BACKUP_PASSPHRASE` (`openssl rand -base64 32`), acrescentar ao
+      `.env` do VPS (nunca ao repositório), correr `./scripts/backup_db.sh`
+      manualmente uma vez e confirmar que o ficheiro cifrado aparece em
+      `backups/`.
+   2. Testar `./scripts/restore_db.sh backups/<ficheiro>.enc` contra uma BD de
+      teste (não a de produção às cegas) - só depois confiar no backup.
+   3. Agendar `scripts/backup_db.sh` via `crontab -e` (comando sugerido dentro
+      do próprio script, secção "Cron sugerido").
+   4. **Encriptação de disco** - normalmente não dá para ligar num VPS já a
+      correr sem reprovisionar: a opção mais simples é criar um novo Volume
+      encriptado na Hetzner Cloud (a consola tem essa opção ao criar o volume),
+      montá-lo, copiar `pgdata` para lá com o Postgres parado (`docker compose
+      stop db`), e apontar o `docker-compose.prod.yml` para o novo caminho do
+      volume antes de reiniciar - só depois de ter um backup testado (passo 2),
+      para haver rede de segurança se algo correr mal a meio da migração.
+   5. Só depois de 4 estar feito, a frase "encriptação de dados sensíveis" na
+      Política de Privacidade passa a ser verdade para os dados financeiros,
+      não só para a password - vale a pena reler o texto nessa altura para
+      confirmar que continua rigoroso.
+
+   Nada disto substitui a consulta jurídica MiFID II/CMVM já registada na
+   secção 9 como pré-requisito antes de qualquer beta com desconhecidos - esta
+   sessão só fechou lacunas técnicas encontradas ao investigar, não é parecer
+   legal.
