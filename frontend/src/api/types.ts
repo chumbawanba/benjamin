@@ -331,6 +331,18 @@ export interface PortfolioCurrency {
   currency: string;
 }
 
+export interface Loan {
+  id: string;
+  name: string;
+  currency: string;
+  balance: number | string;
+  interest_rate: number | string | null;
+  monthly_payment: number | string | null;
+  updated_at: string;
+  display_currency: string;
+  balance_converted: number | string | null;
+}
+
 export interface FxRate {
   base_currency: string;
   quote_currency: string;

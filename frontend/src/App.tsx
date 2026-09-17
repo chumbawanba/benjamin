@@ -9,6 +9,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { trackPageview } from './lib/analytics';
 import AdminStats from './pages/AdminStats';
 import FxRates from './pages/FxRates';
+import Loans from './pages/Loans';
 import Login from './pages/Login';
 import Notifications from './pages/Notifications';
 import Overview from './pages/Overview';
@@ -52,6 +53,7 @@ export default function App() {
                   <Route path="/workspace" element={<StrategyWorkspace />} />
                   <Route path="/portfolio" element={<Portfolio />} />
                   <Route path="/portfolio/fx-rates" element={<FxRates />} />
+                  <Route path="/loans" element={<Loans />} />
                   <Route path="/stocks/:id" element={<StockDetail />} />
                   <Route path="/strategies/:id" element={<StrategyEditor />} />
                   <Route path="/notifications" element={<Notifications />} />

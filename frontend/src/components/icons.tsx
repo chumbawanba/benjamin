@@ -63,3 +63,14 @@ export function IconBell({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+export function IconBanknote({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <rect x="2.5" y="6.5" width="19" height="11" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <line x1="6" y1="9.5" x2="6" y2="9.5" strokeWidth="2.4" />
+      <line x1="18" y1="14.5" x2="18" y2="14.5" strokeWidth="2.4" />
+    </svg>
+  );
+}

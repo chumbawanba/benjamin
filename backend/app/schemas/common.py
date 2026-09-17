@@ -317,6 +317,41 @@ class FxRateOut(BaseModel):
     date: date
 
 
+# ---- Loans (empréstimos/passivos, distinto do portfolio) ----
+class LoanIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    currency: str = Field(min_length=3, max_length=3)
+    balance: Decimal = Field(ge=0)
+    interest_rate: Decimal | None = Field(default=None, ge=0)
+    monthly_payment: Decimal | None = Field(default=None, ge=0)
+
+
+class LoanUpdateIn(BaseModel):
+    # Sem `currency` - imutável depois de criado, mesmo padrão de PositionUpdateIn
+    # não incluir o ticker (identidade da posição).
+    name: str = Field(min_length=1, max_length=255)
+    balance: Decimal = Field(ge=0)
+    interest_rate: Decimal | None = Field(default=None, ge=0)
+    monthly_payment: Decimal | None = Field(default=None, ge=0)
+
+
+class LoanOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    currency: str
+    balance: Decimal
+    interest_rate: Decimal | None
+    monthly_payment: Decimal | None
+    updated_at: datetime
+    # Valor convertido para User.preferred_currency (mesmo padrão de
+    # PositionOut, ver app/services/fx.py) - None se a taxa não estiver
+    # disponível. display_currency é sempre a moeda preferida atual.
+    display_currency: str
+    balance_converted: Decimal | None
+
+    model_config = {"from_attributes": True}
+
+
 # ---- Strategies ----
 class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
