@@ -118,6 +118,46 @@ async def test_projection_other_asset_without_rate_stays_constant(client, user_a
         assert Decimal(point["other_assets_value"]) == Decimal("5000")
 
 
+async def test_projection_adds_monthly_savings_to_portfolio(client, user_a, seeded_stock):
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post(
+        "/portfolio", json={"ticker": "AAPL", "quantity": "10", "avg_cost": "150"}, headers=headers,
+    )
+    resp = await client.get("/projection?years=2&annual_return_pct=10&monthly_savings=100", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert Decimal(body["monthly_savings"]) == Decimal("100")
+    starting = Decimal(body["starting_portfolio_value"])
+    points = body["points"]
+    # pv0 = starting; pv1 = pv0*1.1 + 1200 (100/mês x 12); pv2 = pv1*1.1 + 1200.
+    expected_1 = starting * Decimal("1.1") + Decimal("1200")
+    expected_2 = expected_1 * Decimal("1.1") + Decimal("1200")
+    assert Decimal(points[1]["portfolio_value"]) == expected_1
+    assert Decimal(points[2]["portfolio_value"]) == expected_2
+
+
+async def test_projection_without_monthly_savings_unchanged(client, user_a, seeded_stock):
+    """monthly_savings omitido (0) deve dar exactamente o mesmo resultado de
+    antes desta funcionalidade - crescimento composto simples."""
+    headers = await login(client, "a@test.dev", "password-a")
+    await client.post(
+        "/portfolio", json={"ticker": "AAPL", "quantity": "10", "avg_cost": "150"}, headers=headers,
+    )
+    resp = await client.get("/projection?years=2&annual_return_pct=10", headers=headers)
+    body = resp.json()
+    assert Decimal(body["monthly_savings"]) == Decimal("0")
+    starting = Decimal(body["starting_portfolio_value"])
+    points = body["points"]
+    assert Decimal(points[1]["portfolio_value"]) == starting * Decimal("1.1")
+    assert Decimal(points[2]["portfolio_value"]) == starting * Decimal("1.1") ** 2
+
+
+async def test_projection_monthly_savings_negative_rejected(client, user_a):
+    headers = await login(client, "a@test.dev", "password-a")
+    resp = await client.get("/projection?monthly_savings=-50", headers=headers)
+    assert resp.status_code == 422
+
+
 async def test_projection_isolated_between_users(client, user_a, user_b):
     headers_a = await login(client, "a@test.dev", "password-a")
     headers_b = await login(client, "b@test.dev", "password-b")

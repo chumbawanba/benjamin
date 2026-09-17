@@ -23,15 +23,18 @@ function milestoneYears(years: number): number[] {
 export default function ProjectionPage() {
   const [years, setYears] = useState('20');
   const [annualReturnPct, setAnnualReturnPct] = useState('5');
+  const [monthlySavings, setMonthlySavings] = useState('0');
   const [data, setData] = useState<Projection | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(y: string, r: string) {
+  async function load(y: string, r: string, s: string) {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.get<Projection>(`/projection?years=${y}&annual_return_pct=${r}`);
+      const result = await api.get<Projection>(
+        `/projection?years=${y}&annual_return_pct=${r}&monthly_savings=${s.trim() || '0'}`,
+      );
       setData(result);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao calcular projeção');
@@ -41,13 +44,13 @@ export default function ProjectionPage() {
   }
 
   useEffect(() => {
-    load(years, annualReturnPct);
+    load(years, annualReturnPct, monthlySavings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    void load(years, annualReturnPct);
+    void load(years, annualReturnPct, monthlySavings);
   }
 
   return (
@@ -55,9 +58,10 @@ export default function ProjectionPage() {
       <h1 className="text-xl font-bold text-gray-900 dark:text-slate-100 mb-1">Projeção de património</h1>
       <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">
         Extrapolação simples a partir dos dados de hoje: o portfolio cresce à rentabilidade que indicares
-        abaixo, cada outro ativo (imóveis, outros - ver separador Património) cresce à sua própria taxa
-        esperada, e cada empréstimo desce pela sua prestação mensal x 12 por ano até chegar a zero. Não é
-        aconselhamento financeiro nem uma previsão - é só para teres uma ideia de tendência.
+        abaixo (mais a poupança mensal que indicares, se alguma), cada outro ativo (imóveis, outros - ver
+        separador Património) cresce à sua própria taxa esperada, e cada empréstimo desce pela sua
+        prestação mensal x 12 por ano até chegar a zero. Não é aconselhamento financeiro nem uma
+        previsão - é só para teres uma ideia de tendência.
       </p>
 
       <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-xl shadow-sm p-4 mb-4 flex flex-wrap items-end gap-3">
@@ -77,6 +81,16 @@ export default function ProjectionPage() {
             onChange={(e) => setAnnualReturnPct(e.target.value)}
             inputMode="decimal"
             className="block w-32 mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-xs text-gray-500 dark:text-slate-400">
+          Poupança mensal investida (opcional)
+          <input
+            value={monthlySavings}
+            onChange={(e) => setMonthlySavings(e.target.value)}
+            inputMode="decimal"
+            placeholder="0"
+            className="block w-36 mt-1 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg px-2 py-1.5 text-sm"
           />
         </label>
         <button

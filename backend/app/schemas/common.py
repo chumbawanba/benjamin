@@ -366,6 +366,11 @@ class ProjectionOut(BaseModel):
     currency: str
     annual_return_pct: Decimal
     years: int
+    # Poupança mensal (rendimento líquido investido) que o utilizador indicou -
+    # ver services/projection.py::compute. 0 quando omitida - mantém a
+    # projeção igual à de antes desta funcionalidade (só crescimento do valor
+    # já existente, sem novas entradas de capital).
+    monthly_savings: Decimal
     starting_portfolio_value: Decimal
     starting_other_assets_value: Decimal
     starting_loans_balance: Decimal

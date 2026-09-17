@@ -16,10 +16,21 @@ em vez da taxa geral do portfolio de ações (pedido explícito do Edgar: "Cada
 ativo com a sua própria taxa"). Um ativo sem taxa definida mantém o valor
 constante ao longo da projeção.
 
+`monthly_savings` (opcional, pedido pelo Edgar depois de já ter a projeção em
+produção - "faltam os rendimentos líquidos") é o valor mensal que o
+utilizador poupa e investe - somado ao portfolio no fim de cada ano
+(`monthly_savings * 12`), a acrescer ao crescimento pela rentabilidade
+assumida. Fica **fixo** ao longo de toda a simulação (decisão tomada com o
+Edgar: manter simples, sem modelar aumentos salariais/inflação do próprio
+valor poupado - ele ajusta manualmente e volta a simular se a situação
+mudar) e só entra no portfolio de ações, não nos Outros Ativos nem reduz
+empréstimos (para isso já existe a prestação mensal do próprio empréstimo).
+0/omitido mantém a projeção igual à de antes desta funcionalidade.
+
 Não é um modelo actuarial: não simula inflação, não muda a taxa de câmbio ao
-longo do tempo (usa a taxa atual, fixa, para todos os anos) e não tem em conta
-novas entradas/saídas de capital - é uma extrapolação simples dos dados
-actuais, para dar uma ideia de tendência, não uma previsão financeira.
+longo do tempo (usa a taxa atual, fixa, para todos os anos) e a poupança
+mensal é a única entrada de capital nova considerada - não há levantamentos
+periódicos (fica para uma fase futura, se vier a ser pedido).
 """
 from decimal import Decimal
 
@@ -86,7 +97,10 @@ async def _current_other_assets(db: AsyncSession, user: User, target: str) -> li
     return result
 
 
-async def compute(db: AsyncSession, user: User, years: int, annual_return_pct: Decimal) -> ProjectionOut:
+async def compute(
+    db: AsyncSession, user: User, years: int, annual_return_pct: Decimal,
+    monthly_savings: Decimal = Decimal("0"),
+) -> ProjectionOut:
     target = user.preferred_currency
     portfolio_value = await _current_portfolio_value(db, user, target)
     loans = await _current_loans(db, user, target)
@@ -95,6 +109,7 @@ async def compute(db: AsyncSession, user: User, years: int, annual_return_pct: D
     starting_other_assets_value = sum((value for value, _ in other_assets), Decimal("0"))
 
     growth_factor = Decimal("1") + (annual_return_pct / Decimal("100"))
+    annual_savings = monthly_savings * Decimal("12")
     balances = [balance for balance, _ in loans]
     payments = [payment for _, payment in loans]
     # Cada outro ativo tem a sua própria taxa - guardamos os fatores de
@@ -103,8 +118,14 @@ async def compute(db: AsyncSession, user: User, years: int, annual_return_pct: D
     asset_growth_factors = [Decimal("1") + rate for _, rate in other_assets]
 
     points: list[ProjectionPointOut] = []
+    # O portfolio deixa de ter fórmula fechada (valor * taxa^ano) assim que há
+    # poupança mensal a entrar todos os anos - por isso passa a ser calculado
+    # ano a ano (pv_ano = pv_ano_anterior * fator + poupança_anual), mesmo
+    # padrão iterativo já usado para o saldo dos empréstimos abaixo.
+    pv = portfolio_value
     for year in range(years + 1):
-        pv = portfolio_value * (growth_factor ** year)
+        if year > 0:
+            pv = pv * growth_factor + annual_savings
         other_total = sum(
             (av * (gf ** year) for av, gf in zip(asset_values, asset_growth_factors)), Decimal("0")
         )
@@ -118,6 +139,7 @@ async def compute(db: AsyncSession, user: User, years: int, annual_return_pct: D
 
     return ProjectionOut(
         currency=target, annual_return_pct=annual_return_pct, years=years,
+        monthly_savings=monthly_savings,
         starting_portfolio_value=portfolio_value, starting_other_assets_value=starting_other_assets_value,
         starting_loans_balance=starting_loans_balance,
         points=points,

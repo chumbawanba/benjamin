@@ -424,3 +424,22 @@ os números da projeção à mão, editar e apagar um ativo) - tudo correcto. O
 já registado acima (binário nativo do rollup em falta) - **[POR CONFIRMAR]** que o
 `npm run dev` real no PC do Edgar mostra a página Património correctamente (o
 `tsc -b` garante os tipos, não o resultado visual).
+
+
+**Poupança mensal (rendimentos líquidos) na Projeção — pedido do Edgar depois de já
+ver a página em produção** ("lembrei-me que na projecção faltam os rendimentos
+líquidos"). Esclarecido antes de mexer: representa a poupança mensal que o
+utilizador investe (não rendimento passivo já reinvestido - isso já está implícito
+na rentabilidade assumida) e fica **fixa** ao longo de toda a simulação (decisão
+tomada com o Edgar - mais simples, sem modelar aumentos salariais/inflação da
+própria poupança). Novo parâmetro opcional `monthly_savings` em
+`GET /projection` (default 0, mantém o comportamento anterior inalterado), somado
+ao portfolio no fim de cada ano (`monthly_savings * 12`) - só ao portfolio de
+ações, não aos Outros Ativos nem reduz empréstimos (para isso já existe a
+prestação mensal do próprio empréstimo). Obrigou a passar o cálculo do valor do
+portfolio de fórmula fechada (`valor * taxa^ano`) para iterativo ano a ano, mesmo
+padrão já usado para o saldo dos empréstimos. Campo novo no formulário da página
+Projeção. 3 testes novos (soma correcta, comportamento inalterado quando omitido,
+valor negativo rejeitado) - suite completa continua verde (273 passed). Verificado
+também com um smoke test real (uvicorn + SQLite) conferindo os valores ano a ano
+à mão.

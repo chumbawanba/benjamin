@@ -367,6 +367,7 @@ export interface Projection {
   currency: string;
   annual_return_pct: number | string;
   years: number;
+  monthly_savings: number | string;
   starting_portfolio_value: number | string;
   starting_other_assets_value: number | string;
   starting_loans_balance: number | string;
