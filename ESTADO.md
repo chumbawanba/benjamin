@@ -29,10 +29,10 @@ confirmação de produção, tratamento jurídico e monetização.
 | | |
 |---|---|
 | Caminho | `C:\Users\edgar\projectos\Benjamin\benjamin` |
-| Ramo | `main`, **1 à frente** de `origin/main` (por dar push - ver nota abaixo) |
-| Árvore de trabalho | limpa após o commit `a7602c1` (2026-09-17) |
-| Último commit | `a7602c1` — *Adicionar Empréstimos (passivos) e Património Líquido no Overview* — **2026-09-17** |
-| Testes backend | **250 passed** (241 antes desta sessão + 9 novos em `test_loans.py`) |
+| Ramo | `main`, **3 à frente** de `origin/main` (por dar push - ver nota abaixo) |
+| Árvore de trabalho | limpa após o commit `26544de` (2026-09-17) |
+| Último commit | `26544de` — *Adicionar projeção de património a longo prazo* — **2026-09-17** |
+| Testes backend | **258 passed** (241 antes desta sessão + 9 de Empréstimos + 8 de Projeção) |
 | Domínios | `appbenjamin.com` (landing estática) e `beta.appbenjamin.com` (app) |
 
 Nota sobre os testes: a suite foi corrida numa venv com **Python 3.10**, porque o
@@ -122,6 +122,8 @@ Os três itens da conversa anterior existem no repositório, todos de 2026-07-28
 | `28c3eaa` | 28/07 13:15 | Dia/hora configurável do resumo por email | 15 ficheiros, migration `b8e1d4f2a7c5`, testes `test_reports.py` |
 | `ae4e848` | 28/07 15:25 | Auto-logout na expiração do token | **só 2 ficheiros, ambos frontend**: `api/client.ts` e `pages/Login.tsx` |
 | `a7602c1` | 17/09 | Empréstimos (passivos) + Património Líquido no Overview | 14 ficheiros, migration `8e77a41ac464`, testes `test_loans.py` |
+| `8da1ce4` | 17/09 | Atualização do ESTADO.md (fase Empréstimos) | 1 ficheiro, sem código |
+| `26544de` | 17/09 | Projeção de património a longo prazo | 12 ficheiros, `routers/projection.py`, `services/projection.py`, `pages/Projection.tsx`, testes `test_projection.py` |
 
 Detalhe relevante para a secção 5: o auto-logout é **exclusivamente frontend**
 (401 com token prévio → limpa sessão → `/login?expired=1` → aviso "A tua sessão
@@ -364,12 +366,11 @@ VM de sandbox - problema conhecido de dependências opcionais do npm, não do c�
 `tsc -b` já garante que os tipos estão correctos, mas um `npm run build` real no PC
 fica por confirmar).
 
-**Pedido para a próxima fase, já com o Edgar (ainda por desenhar/implementar):**
-projecção de património a longo prazo - evolução do património líquido ao longo do
-tempo com base nas prestações dos empréstimos (`Loan.monthly_payment`) e numa
-rentabilidade média assumida para os activos, com capacidade de simulação (o Edgar
-falou em "simular", presumivelmente cenários com parâmetros diferentes). Ainda por
-decidir com ele: fonte da rentabilidade assumida (input manual vs. calculada a partir
-do histórico do portfolio), horizonte temporal por omissão, se entram
-contribuições/levantamentos periódicos na simulação, e se isto é uma página nova ou
-uma secção dentro do Overview/Portfolio.
+**Projeção de património — feita nesta mesma sessão** (commit `26544de`), com as
+decisões tomadas com o Edgar: rentabilidade **input manual** (não calculada do
+histórico), empréstimos amortizados **linearmente pela prestação** (sem separar
+juro/capital), página nova e isolada, **sem** contribuições/levantamentos periódicos
+(fica para uma fase futura, se vier a ser pedido). `GET /projection?years=&annual_return_pct=`
+devolve a série ano a ano; página `Projeção` com gráfico + tabela de marcos.
+Simplificações explícitas a manter em mente: taxa de câmbio fixa ao longo dos anos
+(não projeta variação cambial), sem inflação, sem novas entradas de capital.
