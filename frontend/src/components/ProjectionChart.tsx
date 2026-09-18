@@ -1,4 +1,5 @@
 import { ProjectionPoint } from '../api/types';
+import { niceTicks, formatAxisValue } from '../utils/chart';
 
 interface Props {
   points: ProjectionPoint[];
@@ -32,16 +33,47 @@ export default function ProjectionChart({ points, width = 600, height = 200 }: P
   const min = Math.min(0, ...all);
   const max = Math.max(...all, 1);
   const range = max - min || 1;
-  const stepX = width / (points.length - 1);
-  const y = (v: number) => height - ((v - min) / range) * height;
 
-  const line = (values: number[]) => values.map((v, i) => `${i * stepX},${y(v)}`).join(' ');
+  // Reserva espaço à esquerda para os rótulos do eixo Y; a área do gráfico
+  // em si começa depois disso.
+  const axisWidth = 46;
+  const plotWidth = Math.max(width - axisWidth, 1);
+  const stepX = plotWidth / (points.length - 1);
+  const y = (v: number) => height - ((v - min) / range) * height;
+  const x = (i: number) => axisWidth + i * stepX;
+
+  const line = (values: number[]) => values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  const ticks = niceTicks(min, max);
 
   return (
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height }}>
+        {/* Linhas-guia do eixo Y, com o valor à esquerda para dar contexto
+            de escala (antes o gráfico não tinha nenhuma referência numérica). */}
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              x1={axisWidth}
+              y1={y(t)}
+              x2={width}
+              y2={y(t)}
+              strokeWidth={1}
+              className="stroke-gray-100 dark:stroke-slate-800"
+            />
+            <text
+              x={axisWidth - 6}
+              y={y(t)}
+              dy="0.32em"
+              textAnchor="end"
+              className="fill-gray-400 dark:fill-slate-500"
+              style={{ fontSize: 9 }}
+            >
+              {formatAxisValue(t)}
+            </text>
+          </g>
+        ))}
         {min < 0 && max > 0 && (
-          <line x1={0} y1={y(0)} x2={width} y2={y(0)} strokeWidth={1} className="stroke-gray-200 dark:stroke-slate-700" />
+          <line x1={axisWidth} y1={y(0)} x2={width} y2={y(0)} strokeWidth={1} className="stroke-gray-200 dark:stroke-slate-700" />
         )}
         <polyline points={line(portfolio)} fill="none" strokeWidth={1.5} className="stroke-navy-400 dark:stroke-navy-500" strokeDasharray="4 3" />
         <polyline points={line(otherAssets)} fill="none" strokeWidth={1.5} className="stroke-emerald-400 dark:stroke-emerald-500" strokeDasharray="4 3" />
