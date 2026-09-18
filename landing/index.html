@@ -48,6 +48,16 @@
   body { background: #FAFAF8; }
   .glow { background: radial-gradient(600px circle at 50% 0%, rgba(15,23,42,0.06), transparent 70%); }
   .flow-arrow { color: #b3c1dd; }
+
+  /* Hero product card: a small mockup of the real "Projeção do
+     património" chart (see ProjectionChart.tsx), used as proof-of-product
+     imagery in the hero instead of decorative illustration. */
+  .app-card-shadow {
+    box-shadow: 0 20px 60px -20px rgba(15,23,42,0.18), 0 4px 16px -4px rgba(15,23,42,0.06);
+  }
+  .chip-shadow {
+    box-shadow: 0 8px 20px -8px rgba(15,23,42,0.15);
+  }
 </style>
 <script type="application/ld+json">
 {
@@ -80,8 +90,8 @@
   </header>
 
   <!-- Hero -->
-  <section class="glow">
-    <div class="max-w-3xl mx-auto px-6 pt-16 pb-16 text-center">
+  <section class="glow relative overflow-hidden">
+    <div class="relative z-10 max-w-3xl mx-auto px-6 pt-16 pb-16 text-center">
       <img src="icon-512.png" alt="Benjamin" class="w-20 h-20 rounded-full mx-auto mb-8 shadow-sm" />
       <h1 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
         Investe com cabeça, não por impulso.
@@ -103,6 +113,96 @@
         Em beta. Grátis para começar.
         <a href="/risk-warning.html" class="underline hover:text-navy-600">Não é aconselhamento financeiro.</a>
       </p>
+    </div>
+
+    <!-- Product mockup: a static rendering of the real Projection chart,
+         used as proof of product instead of decorative artwork. -->
+    <div class="relative z-10 max-w-4xl mx-auto px-6 pb-8 sm:pb-16">
+      <div class="app-card-shadow bg-white border border-navy-50 rounded-2xl px-5 sm:px-8 py-6 sm:py-7 text-left">
+        <div class="flex items-center justify-between mb-5">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-navy-900 flex items-center justify-center shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M3 17L9 11L13 15L21 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <div class="font-bold text-navy-900 text-sm sm:text-base">Projeção do património</div>
+              <div class="text-xs text-navy-400 mt-0.5">Próximos 20 anos · cenário base</div>
+            </div>
+          </div>
+          <div class="text-navy-200 text-lg tracking-widest">⋯</div>
+        </div>
+
+        <div class="flex flex-wrap gap-6 sm:gap-10 mb-6">
+          <div>
+            <div class="text-xs text-navy-400 mb-1">Património atual</div>
+            <div class="text-xl sm:text-2xl font-extrabold text-navy-900">€84 200</div>
+          </div>
+          <div>
+            <div class="text-xs text-navy-400 mb-1">Projeção aos 20 anos</div>
+            <div class="text-xl sm:text-2xl font-extrabold" style="color:#1a7f5a">€412 500</div>
+          </div>
+        </div>
+
+        <div class="relative">
+          <!-- Life-event annotation: shows the app tracking a composition
+               change (buying a home: cash down, asset up, debt up), not
+               just a single blended net-worth line. Hidden on mobile
+               together with the marker below, where there isn't room for
+               the label. -->
+          <div class="chip-shadow hidden sm:block absolute top-4 left-[40%] bg-white border border-navy-50 rounded-xl px-3 py-2 text-xs whitespace-nowrap">
+            <div class="flex items-center gap-1.5 font-bold text-navy-900 mb-1">
+              <span class="w-5 h-5 rounded-full bg-navy-50 flex items-center justify-center shrink-0">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 11L12 4L21 11" stroke="#2f4a7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M5 10V19C5 19.55 5.45 20 6 20H18C18.55 20 19 19.55 19 19V10" stroke="#2f4a7c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              Compra de casa
+            </div>
+            <div class="flex gap-2 text-navy-400">
+              <span>Cash −€40k</span>
+              <span>Imóvel +€180k</span>
+              <span>Dívida +€140k</span>
+            </div>
+          </div>
+          <svg viewBox="0 0 760 220" width="100%" height="220" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="heroChartFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2f4a7c" stop-opacity="0.16" />
+                <stop offset="100%" stop-color="#2f4a7c" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <g stroke="#eef1f8" stroke-width="1">
+              <line x1="0" y1="40" x2="760" y2="40" />
+              <line x1="0" y1="90" x2="760" y2="90" />
+              <line x1="0" y1="140" x2="760" y2="140" />
+              <line x1="0" y1="190" x2="760" y2="190" />
+            </g>
+            <path d="M0,190 C120,180 160,165 220,150 C300,130 340,120 400,95 C480,65 520,55 580,40 C640,28 700,18 760,10 L760,220 L0,220 Z" fill="url(#heroChartFill)" />
+            <path d="M0,190 C120,180 160,165 220,150 C300,130 340,120 400,95 C480,65 520,55 580,40 C640,28 700,18 760,10"
+                  fill="none" stroke="#2f4a7c" stroke-width="3" stroke-linecap="round" />
+            <path d="M0,190 C160,183 320,172 480,158 C580,150 680,142 760,135"
+                  fill="none" stroke="#b3c1dd" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round" />
+            <!-- leader line + dot for the life-event marker above -->
+            <g class="hidden sm:block">
+              <line x1="304" y1="128" x2="304" y2="82" stroke="#b3c1dd" stroke-width="1.5" stroke-dasharray="3 4" />
+              <circle cx="304" cy="128" r="5" fill="#fff" stroke="#2f4a7c" stroke-width="2.5" />
+            </g>
+            <circle cx="756" cy="10" r="5" fill="#2f4a7c" />
+          </svg>
+        </div>
+
+        <div class="flex flex-wrap gap-5 mt-4 pt-4 border-t border-navy-50">
+          <div class="flex items-center gap-1.5 text-xs text-navy-400">
+            <span class="w-2 h-2 rounded-full" style="background:#2f4a7c"></span> Património projetado
+          </div>
+          <div class="flex items-center gap-1.5 text-xs text-navy-400">
+            <span class="w-2 h-2 rounded-full bg-navy-200"></span> Só com poupança (sem crescimento)
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
