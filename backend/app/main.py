@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import admin, analyst, auth, evaluations, loans, notifications, other_assets, portfolio, projection, strategies, waitlist, watchlist
+from app.routers import admin, analyst, auth, evaluations, loans, notifications, other_assets, patrimony_history, portfolio, projection, strategies, waitlist, watchlist
 from app.scheduler import alerts_job, daily_refresh_job, report_job
 
 
@@ -56,6 +56,7 @@ app.include_router(portfolio.router, prefix=API)
 app.include_router(loans.router, prefix=API)
 app.include_router(other_assets.router, prefix=API)
 app.include_router(projection.router, prefix=API)
+app.include_router(patrimony_history.router, prefix=API)
 app.include_router(waitlist.router, prefix=API)
 app.include_router(notifications.router, prefix=API)
 app.include_router(admin.router, prefix=API)

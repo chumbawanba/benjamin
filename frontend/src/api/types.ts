@@ -374,6 +374,27 @@ export interface Projection {
   points: ProjectionPoint[];
 }
 
+export interface PatrimonySnapshot {
+  id: string;
+  date: string;
+  currency: string;
+  stocks_value: number | string;
+  cash_value: number | string;
+  other_assets_value: number | string;
+  loans_balance: number | string;
+  net_worth: number | string;
+  note: string | null;
+  updated_at: string;
+}
+
+export interface PatrimonyCurrentTotals {
+  currency: string;
+  stocks_value: number | string;
+  cash_value: number | string;
+  other_assets_value: number | string;
+  loans_balance: number | string;
+}
+
 export interface FxRate {
   base_currency: string;
   quote_currency: string;

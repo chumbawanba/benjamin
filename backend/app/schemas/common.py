@@ -413,6 +413,46 @@ class OtherAssetOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ---- Histórico de património (fotografias manuais para acompanhar a
+# evolução ao longo do tempo - Position/OtherAsset/Loan só guardam o valor
+# atual) ----
+class PatrimonySnapshotIn(BaseModel):
+    date: date
+    currency: str = Field(min_length=3, max_length=3)
+    stocks_value: Decimal = Field(ge=0)
+    cash_value: Decimal = Field(ge=0)
+    other_assets_value: Decimal = Field(ge=0)
+    loans_balance: Decimal = Field(ge=0)
+    note: str | None = None
+
+
+class PatrimonySnapshotOut(BaseModel):
+    id: uuid.UUID
+    date: date
+    currency: str
+    stocks_value: Decimal
+    cash_value: Decimal
+    other_assets_value: Decimal
+    loans_balance: Decimal
+    # Calculado a partir dos 4 valores guardados - não é um campo próprio na
+    # tabela, para não correr o risco de ficar dessincronizado do breakdown.
+    net_worth: Decimal
+    note: str | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PatrimonyCurrentTotalsOut(BaseModel):
+    # Totais ao vivo (mesma lógica de services/projection.py), usados para
+    # pré-preencher o formulário quando a data escolhida é hoje.
+    currency: str
+    stocks_value: Decimal
+    cash_value: Decimal
+    other_assets_value: Decimal
+    loans_balance: Decimal
+
+
 # ---- Strategies ----
 class StrategyTemplateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)

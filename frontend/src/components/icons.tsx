@@ -109,3 +109,13 @@ export function IconLayers({ className = 'w-5 h-5' }: IconProps) {
     </svg>
   );
 }
+
+export function IconHistory({ className = 'w-5 h-5' }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" {...defaultProps} className={className}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <polyline points="3,4 3,9 8,9" />
+      <polyline points="12,7 12,12 16,14" />
+    </svg>
+  );
+}

@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../api/client';
-import { Loan, OtherAsset, PortfolioCurrency, Position, WatchlistItem } from '../api/types';
+import { Loan, OtherAsset, PatrimonySnapshot, PortfolioCurrency, Position, WatchlistItem } from '../api/types';
 import AcoesTab from '../components/patrimonio/AcoesTab';
 import CashTab from '../components/patrimonio/CashTab';
 import EmprestimosTab from '../components/patrimonio/EmprestimosTab';
+import HistoricoTab from '../components/patrimonio/HistoricoTab';
 import OtherAssetsTab from '../components/patrimonio/OtherAssetsTab';
-import { IconBanknote, IconBuilding, IconLayers, IconTrendingUp, IconWallet } from '../components/icons';
+import { IconBanknote, IconBuilding, IconHistory, IconLayers, IconTrendingUp, IconWallet } from '../components/icons';
 
 // Moedas sempre disponíveis nos seletores, mesmo sem nenhuma posição/ativo
 // ainda nelas - cobre o caso comum (EUR/USD) sem forçar o utilizador a já
 // ter algo nessa moeda. Mesmo padrão das antigas Portfolio.tsx/Loans.tsx.
 const COMMON_CURRENCIES = ['EUR', 'USD', 'GBP'];
 
-type Tab = 'acoes' | 'cash' | 'imoveis' | 'outros' | 'emprestimos';
+type Tab = 'acoes' | 'cash' | 'imoveis' | 'outros' | 'emprestimos' | 'historico';
 
 const TABS: { key: Tab; label: string; icon: typeof IconWallet }[] = [
   { key: 'acoes', label: 'Ações', icon: IconTrendingUp },
@@ -21,10 +22,14 @@ const TABS: { key: Tab; label: string; icon: typeof IconWallet }[] = [
   { key: 'imoveis', label: 'Imóveis', icon: IconBuilding },
   { key: 'outros', label: 'Outros', icon: IconLayers },
   { key: 'emprestimos', label: 'Empréstimos', icon: IconBanknote },
+  { key: 'historico', label: 'Histórico', icon: IconHistory },
 ];
 
 function isTab(value: string | null): value is Tab {
-  return value === 'acoes' || value === 'cash' || value === 'imoveis' || value === 'outros' || value === 'emprestimos';
+  return (
+    value === 'acoes' || value === 'cash' || value === 'imoveis' || value === 'outros' ||
+    value === 'emprestimos' || value === 'historico'
+  );
 }
 
 function toNum(v: number | string | null | undefined): number | null {
@@ -71,6 +76,7 @@ export default function Patrimonio() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [otherAssets, setOtherAssets] = useState<OtherAsset[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [patrimonyHistory, setPatrimonyHistory] = useState<PatrimonySnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,18 +86,20 @@ export default function Patrimonio() {
   async function load() {
     setLoading(true);
     try {
-      const [posData, curr, wl, assetsData, loansData] = await Promise.all([
+      const [posData, curr, wl, assetsData, loansData, historyData] = await Promise.all([
         api.get<Position[]>('/portfolio'),
         api.get<PortfolioCurrency>('/portfolio/currency'),
         api.get<WatchlistItem[]>('/watchlist'),
         api.get<OtherAsset[]>('/other-assets'),
         api.get<Loan[]>('/loans'),
+        api.get<PatrimonySnapshot[]>('/patrimony-history'),
       ]);
       setPositions(posData);
       setCurrency(curr.currency);
       setWatchlist(wl);
       setOtherAssets(assetsData);
       setLoans(loansData);
+      setPatrimonyHistory(historyData);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Erro ao carregar património');
     } finally {
@@ -245,6 +253,9 @@ export default function Patrimonio() {
             />
           )}
           {tab === 'emprestimos' && <EmprestimosTab loans={loans} onReload={load} />}
+          {tab === 'historico' && (
+            <HistoricoTab snapshots={patrimonyHistory} currency={currency} onReload={load} />
+          )}
         </>
       )}
     </div>
